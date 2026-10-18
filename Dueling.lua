@@ -1,25 +1,59 @@
--- DG Hub v43 — Smart Parry (Anti-Salah Tangkis)
+-- DG Hub v44 — Direct UI Button Bypass (No VIM)
 local Players    = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local RS         = game:GetService("ReplicatedStorage")
+local UIS        = game:GetService("UserInputService")
 local LP         = Players.LocalPlayer
+local PGui       = LP:WaitForChild("PlayerGui")
+local CoreGui    = game:GetService("CoreGui")
 
--- [1] REMOTE ASLI
-local Remotes = RS:WaitForChild("Remotes")
-local PCRequest = Remotes:WaitForChild("PlayerCharacter"):WaitForChild("Request")
-local StartBlock = PCRequest:WaitForChild("StartBlock")
-local ReleaseBlock = PCRequest:WaitForChild("ReleaseBlock")
+-- [1] CARI TOMBOL PARRY YANG ASLI DI LAYAR
+local parryBtn = nil
+local function findRealParryButton()
+    for _, folder in ipairs({PGui, CoreGui}) do
+        for _, obj in ipairs(folder:GetDescendants()) do
+            if (obj:IsA("TextButton") or obj:IsA("ImageButton")) and obj.Visible then
+                -- Kita cari yang teksnya PARRY, atau namanya ada PARRY, atau posisinya di atas Dodge
+                local isParry = false
+                if obj:IsA("TextButton") and string.find(string.upper(obj.Text), "PARRY") then isParry = true end
+                if string.find(string.upper(obj.Name), "PARRY") then isParry = true end
+                
+                -- Pengecualian: jangan pilih tombol pencapaian
+                if string.find(string.upper(obj:GetFullName()), "ACHIEVEMENT") then isParry = false end
 
--- [2] FUNGSI PARRY
+                if isParry then
+                    parryBtn = obj
+                    print("[DG] Tombol PARRY ketemu: " .. obj:GetFullName())
+                    return
+                end
+            end
+        end
+    end
+end
+findRealParryButton()
+
+-- [2] FUNGSI NEMBAK TOMBOL (Tanpa VIM)
 local function fireParry()
+    if not parryBtn or not parryBtn.Parent then
+        findRealParryButton() -- Scan ulang kalau belum dapet
+        if not parryBtn then return end
+    end
+    
+    -- Paksa tombolnya nganggep dia baru aja disentuh
     pcall(function()
-        StartBlock:FireServer()
-        task.wait(0.03) 
-        ReleaseBlock:FireServer()
+        local touchInput = Instance.new("Touch")
+        touchInput.Position = parryBtn.AbsolutePosition + (parryBtn.AbsoluteSize / 2)
+        
+        -- Panggil event InputBegan dan InputEnded langsung ke objek tombolnya
+        parryBtn:InputBegan(touchInput, false)
+        task.wait(0.02)
+        parryBtn:InputEnded(touchInput, false)
     end)
+    
+    -- Tembak event klik utamanya
+    pcall(function() parryBtn.Activated:Fire() end)
 end
 
--- [3] AUTO-PARRY ENGINE
+-- [3] ENGINE (Langsung nyala)
 local parryCooldown={}
 RunService.PreSimulation:Connect(function()
     local myChar = LP.Character
@@ -32,21 +66,11 @@ RunService.PreSimulation:Connect(function()
         if p==LP or not alive(p) then continue end
         
         local eHRP = p.Character and p.Character:FindFirstChild("HumanoidRootPart")
-        if not eHRP then continue end
+        if not eHRP or (eHRP.Position - myHRP.Position).Magnitude > 20 then continue end
         
-        -- [LOGIKA 1] JARAK: Cuma nangkis kalau jarak di bawah 15 studs (1 tebasan pedang)
-        local distance = (eHRP.Position - myHRP.Position).Magnitude
-        if distance > 15 then continue end
+        -- Pastikan lawan ngadep ke kita
+        if eHRP.CFrame.LookVector:Dot((myHRP.Position - eHRP.Position).Unit) < 0.5 then continue end
         
-        -- [LOGIKA 2] ARAH HADAP: Pastiin lawan ngadep ke kita (Bukan kita yang ngadep lawan)
-        local lookVector = eHRP.CFrame.LookVector
-        local directionToMe = (myHRP.Position - eHRP.Position).Unit
-        local dotProduct = lookVector:Dot(directionToMe)
-        
-        -- Dot Product > 0.5 artinya lawan beneran ngehadapin kita (60 derajat)
-        if dotProduct < 0.5 then continue end
-        
-        -- LOGIKA ANIMASI
         local animator = p.Character and p.Character:FindFirstChild("Animator")
         if not animator then continue end
         
@@ -70,4 +94,4 @@ RunService.PreSimulation:Connect(function()
     end
 end)
 
-print("[DG] Smart Auto-Parry v43 Aktif di background.")
+print("[DG] v44 Aktif. Lo tinggal masuk duel, script bakal nekan tombol UI PARRY lo secara langsung.")
