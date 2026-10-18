@@ -1,7 +1,8 @@
--- Drag Drive Simulator — All-in-One Mobile v1.0
+-- Drag Drive Simulator — All-in-One Mobile v1.0 (SILENT BUILD)
 -- Target game: Beta V1.1.9
--- Executor: Arceus X, Delta, Fluxus, Codex, Hydrogen
--- AutoFarm: coroutine-based, single-pass scan, no Heartbeat stall
+-- Fix: Hapus semua warn()/print() yang bisa ke-flag anti-cheat.
+-- Fix: Buang gethui(), fallback ke CoreGui/PlayerGui dengan silent pcall.
+-- Fix: DisplayOrder diturunkan ke 100 (tidak mencolok).
 
 local Players           = game:GetService("Players")
 local RunService        = game:GetService("RunService")
@@ -22,29 +23,18 @@ local PlayerGui = LP:WaitForChild("PlayerGui")
 -- CONFIG
 -- ============================================================
 local Config = {
-    -- Perfect Start
     PerfectStart=false, LaunchRPM=0.62, LaunchRampTime=0.45, LaunchDelay=0.05,
     UseClutch=true, UseGear1=true, UseWheelieHold=false,
-
-    -- Speed Changer
     SpeedEnabled=false, CarTargetKmh=180, BikeTargetKmh=160,
     MaxTargetKmh=320, MinTargetKmh=40,
     AccelRate=0.10, DecelRate=0.25, HysteresisKmh=2.0,
     MaxDeltaKmhPerFrame=6, MinCurrentKmh=5, StudsToKmh=1.008,
-
-    -- AutoShift
     AutoShift=false, ShiftPoint=0.92,
-
-    -- Visual
     ESP=false, ESPColor=Color3.fromRGB(0,255,180), Fullbright=false, NoFog=false,
     FOV=80, NoDrag=false, CameraLock=false, AutoWin=false, AntiAFK=true,
-
-    -- Farm
     AutoCourier=false, AutoBarista=false, AutoOffice=false, FarmQueueMode=false,
     FarmRadius=60, FarmInterval=0.6, TeleportFarm=true,
     TeleportOffset=Vector3.new(0,3,0), ScanAllMaps=true,
-
-    -- Upgrade / Redeem
     AutoUpgrade=false, UpgradeCheck=3.0,
     UpgradePriority={"Engine","Turbo","Weight","Grip","Transmission"},
     AutoRedeem=false,
@@ -53,8 +43,6 @@ local Config = {
         "HBDADVGAMERSTEAM26","DELAYDIKITLAGIFREESTYLE","DRAGDRIVESIMULATORSEPTEMBER26",
     },
     RedeemInterval=5.0,
-
-    -- BETA
     MathSolver=false, MathInterval=1.2, MathSubmit=true,
     GearProbe=false, WheelieProbe=false,
 }
@@ -670,55 +658,32 @@ track(RunService.Heartbeat:Connect(mathTick))
 task.spawn(function()
     while task.wait(2.0) do
         if Config.GearProbe and State.Ready and #State.GearValues>0 then
-            local msg="[BETA Gear] "
+            local msg=""
             for _,g in ipairs(State.GearValues) do msg=msg..g.name.."="..tostring(g.value).." " end
-            warn(msg)
-        end
-        if Config.WheelieProbe and State.Ready then
-            local msg="[BETA Wheelie] "
-            for _,w in ipairs(State.WheelieValues) do msg=msg..w.name.."="..tostring(w.value).." " end
-            if #State.WheelieValues==0 then msg=msg.."none" end
-            warn(msg)
         end
     end
 end)
 
 -- ============================================================
--- UI HOST RESOLVER
+-- UI HOST RESOLVER (SILENT)
 -- ============================================================
 local function resolveGuiHost()
-    local candidates = {}
-    pcall(function()
-        if gethui then
-            local h = gethui()
-            if h then table.insert(candidates, {name="gethui()", host=h}) end
-        end
-    end)
-    pcall(function()
-        local cg = game:GetService("CoreGui")
-        if cg then table.insert(candidates, {name="CoreGui", host=cg}) end
-    end)
-    local pg = LP:FindFirstChild("PlayerGui") or LP:WaitForChild("PlayerGui", 3)
-    if pg then table.insert(candidates, {name="PlayerGui", host=pg}) end
-    table.insert(candidates, {name="Workspace", host=Workspace})
-    for _, c in ipairs(candidates) do
+    -- Prioritas 1: CoreGui (kalau executor ijinkan)
+    local cg = game:GetService("CoreGui")
+    if cg then
         local ok = pcall(function()
             local test = Instance.new("ScreenGui")
-            test.Name = "_DDS_Test_" .. tick()
-            test.ResetOnSpawn = false
-            test.Parent = c.host
-            if not test.Parent then error("nil") end
+            test.Parent = cg
             task.wait(0.05)
             test:Destroy()
         end)
-        if ok then
-            warn("[DDS] GUI host resolved: " .. c.name)
-            return c.host
-        else
-            warn("[DDS] GUI host failed: " .. c.name)
-        end
+        if ok then return cg end
     end
-    return pg
+    -- Prioritas 2: PlayerGui
+    local pg = LP:FindFirstChild("PlayerGui") or LP:WaitForChild("PlayerGui", 3)
+    if pg then return pg end
+    -- Fallback: Workspace
+    return Workspace
 end
 
 local GuiHost = resolveGuiHost()
@@ -728,12 +693,10 @@ local function waitCameraReady()
     while os.clock() - start < 5 do
         local cam = Workspace.CurrentCamera
         if cam and cam.ViewportSize.X > 0 and cam.ViewportSize.Y > 0 then
-            warn(string.format("[DDS] Camera ready: %dx%d", cam.ViewportSize.X, cam.ViewportSize.Y))
             return true
         end
         task.wait(0.1)
     end
-    warn("[DDS] Camera timeout, proceeding anyway")
     return false
 end
 waitCameraReady()
@@ -884,7 +847,7 @@ local function createDragSlider(parent,key,label,min,max,step,order,suffix)
 end
 
 -- ============================================================
--- BUILD UI
+-- BUILD UI (SILENT)
 -- ============================================================
 local function buildUI()
     pcall(function()
@@ -892,20 +855,18 @@ local function buildUI()
             if old.Name:sub(1, 4) == "DDS_" then old:Destroy() end
         end
     end)
-    local vp = getViewport()
-    warn(string.format("[DDS] Building UI. Viewport: %dx%d. Host: %s", vp.X, vp.Y, tostring(GuiHost)))
 
     local sg = Instance.new("ScreenGui")
     sg.Name="DDS_v10"; sg.ResetOnSpawn=false; sg.IgnoreGuiInset=true
-    sg.ZIndexBehavior=Enum.ZIndexBehavior.Sibling; sg.DisplayOrder=9999
+    sg.ZIndexBehavior=Enum.ZIndexBehavior.Sibling
+    sg.DisplayOrder=100 -- Turunkan dari 9999 agar tidak dicurigai
     sg.Enabled=true; sg.Parent=GuiHost
     if not sg.Parent then
-        warn("[DDS] ScreenGui.Parent nil — fallback to PlayerGui")
         local fb = LP:FindFirstChild("PlayerGui")
         if fb then sg.Parent = fb; GuiHost = fb else return end
     end
     task.wait(0.1)
-    if not sg.Parent then warn("[DDS] ScreenGui hilang setelah 1 frame — abort") return end
+    if not sg.Parent then return end
     State.UI.Gui = sg
 
     local fab=Instance.new("TextButton")
@@ -913,7 +874,7 @@ local function buildUI()
     fab.Size=UDim2.new(0,56,0,56); fab.Position=UDim2.new(0,20,0,100)
     fab.BackgroundColor3=THEME.accentDim; fab.BorderSizePixel=0
     fab.Text="⚡"; fab.TextColor3=Color3.fromRGB(255,255,255)
-    fab.Font=Enum.Font.GothamBold; fab.TextSize=22; fab.ZIndex=100
+    fab.Font=Enum.Font.GothamBold; fab.TextSize=22; fab.ZIndex=10
     fab.Visible=true; fab.Parent=sg
     makeCorner(fab,28)
     makeStroke(fab,THEME.accent,2,0.3)
@@ -1075,7 +1036,6 @@ local function buildUI()
     end
     State.UI.ApplyLayout=applyLayout
 
-    -- DRIVE
     local pDrive=pages["DRIVE"]
     createToggleSwitch(pDrive,"PerfectStart","Perfect Start",1)
     createToggleSwitch(pDrive,"UseClutch","Deteksi Clutch",2)
@@ -1100,7 +1060,6 @@ local function buildUI()
     info.Parent=pDrive; makeCorner(info,8); makeStroke(info,THEME.accentBetaDim,1,0.7)
     State.UI.InfoLabel=info
 
-    -- VISUAL
     local pVis=pages["VISUAL"]
     createToggleSwitch(pVis,"ESP","ESP Players",1,function(v) if not v then clearESP() end end)
     createToggleSwitch(pVis,"Fullbright","Fullbright",2,function(v)
@@ -1111,7 +1070,6 @@ local function buildUI()
     createToggleSwitch(pVis,"CameraLock","Camera Lock",5)
     createToggleSwitch(pVis,"AutoWin","Auto Win",6)
 
-    -- FARM
     local pFarm=pages["FARM"]
     createToggleSwitch(pFarm,"AutoOffice","Auto Office",1,function(v) if v then Config.AutoBarista=false; Config.AutoCourier=false; Config.FarmQueueMode=false end end)
     createToggleSwitch(pFarm,"AutoBarista","Auto Barista",2,function(v) if v then Config.AutoOffice=false; Config.AutoCourier=false; Config.FarmQueueMode=false end end)
@@ -1123,14 +1081,12 @@ local function buildUI()
     createDragSlider(pFarm,"FarmInterval","Interval",0.2,2.0,0.1,8,"s")
     createToggleSwitch(pFarm,"AntiAFK","Anti AFK",9)
 
-    -- SHOP
     local pShop=pages["SHOP"]
     createToggleSwitch(pShop,"AutoUpgrade","Auto Upgrade",1)
     createDragSlider(pShop,"UpgradeCheck","Upgrade Check",1.0,10.0,0.5,2,"s")
     createToggleSwitch(pShop,"AutoRedeem","Auto Redeem Code",3)
     createDragSlider(pShop,"RedeemInterval","Redeem Interval",2.0,15.0,0.5,4,"s")
 
-    -- BETA
     local pBeta=pages["BETA"]
     local notice=Instance.new("TextLabel")
     notice.Size=UDim2.new(1,0,0,46); notice.BackgroundColor3=THEME.accentBetaDim
@@ -1165,10 +1121,7 @@ local function buildUI()
     task.wait(0.2)
     local vpCheck=getViewport()
     local mainAbsPos=main.AbsolutePosition; local mainAbsSize=main.AbsoluteSize
-    warn(string.format("[DDS] Panel check: pos=(%.0f,%.0f) size=(%.0f,%.0f)",
-        mainAbsPos.X, mainAbsPos.Y, mainAbsSize.X, mainAbsSize.Y))
     if mainAbsSize.X<=0 or mainAbsSize.Y<=0 or mainAbsPos.X<-100 or mainAbsPos.Y<-100 then
-        warn("[DDS] Panel off-screen or zero, forcing reposition")
         main.AnchorPoint=Vector2.new(0,0)
         main.Position=UDim2.new(0,20,0,80)
         main.Size=UDim2.new(0,320,0,math.min(480,vpCheck.Y-100))
@@ -1181,39 +1134,7 @@ local function buildUI()
     track(fab.MouseButton1Click:Connect(function()
         main.Visible=not main.Visible; shadow.Visible=main.Visible
     end))
-
-    task.spawn(function()
-        task.wait(1)
-        warn("[DDS] === DIAGNOSTIC ===")
-        warn("[DDS] ScreenGui parent: "..tostring(sg.Parent))
-        warn("[DDS] ScreenGui.Enabled: "..tostring(sg.Enabled))
-        warn("[DDS] ScreenGui children: "..tostring(#sg:GetChildren()))
-        warn("[DDS] Main visible: "..tostring(main.Visible))
-        warn("[DDS] Main AbsolutePosition: "..tostring(main.AbsolutePosition))
-        warn("[DDS] Main AbsoluteSize: "..tostring(main.AbsoluteSize))
-        warn("[DDS] FAB AbsolutePosition: "..tostring(fab.AbsolutePosition))
-        warn("[DDS] Viewport: "..tostring(getViewport()))
-        warn("[DDS] =================")
-    end)
 end
-
-task.spawn(function()
-    task.wait(3)
-    if not State.UI.Gui or not State.UI.Gui.Parent then
-        warn("[DDS] Retry: ScreenGui not parented after 3s, rebuild with PlayerGui")
-        GuiHost = LP:FindFirstChild("PlayerGui")
-        if GuiHost then buildUI() end
-    end
-    task.wait(1)
-    local mainPanel = State.UI.Gui and State.UI.Gui:FindFirstChild("DDS_MainPanel")
-    if mainPanel and (not mainPanel.Visible or mainPanel.AbsoluteSize.X <= 0) then
-        warn("[DDS] Main panel not visible after build — force reposition")
-        mainPanel.AnchorPoint=Vector2.new(0,0)
-        mainPanel.Position=UDim2.new(0,20,0,80)
-        mainPanel.Size=UDim2.new(0,320,0,400)
-        mainPanel.Visible=true
-    end
-end)
 
 buildUI()
 
