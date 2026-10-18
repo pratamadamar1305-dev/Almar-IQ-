@@ -1,17 +1,7 @@
--- Drag Drive Simulator — All-in-One Mobile v2.0
+-- Drag Drive Simulator — All-in-One Mobile v1.0
 -- Target game: Beta V1.1.9
 -- Executor: Arceus X, Delta, Fluxus, Codex, Hydrogen
--- Changelog v2.0 (dari v1.8):
---   [+] Host resolver berlapis: gethui() → CoreGui → PlayerGui → Workspace
---   [+] Wait camera ready sebelum build (anti viewport 0)
---   [+] Validate ScreenGui.Parent setelah assign
---   [+] Panel default hidden, verify posisi/size, baru show
---   [+] FAB fallback posisi absolut (selalu muncul)
---   [+] Diagnostic log ke console
---   [+] Auto-retry host fallback setelah 3s
---   [+] Fix slider drag di touch (InputChanged global)
---   [+] Fix shadow 0x0, applyLayout timing, tab warna reset
---   [+] Label adaptif di compact mode (tidak truncate)
+-- AutoFarm: coroutine-based, single-pass scan, no Heartbeat stall
 
 local Players           = game:GetService("Players")
 local RunService        = game:GetService("RunService")
@@ -32,18 +22,29 @@ local PlayerGui = LP:WaitForChild("PlayerGui")
 -- CONFIG
 -- ============================================================
 local Config = {
+    -- Perfect Start
     PerfectStart=false, LaunchRPM=0.62, LaunchRampTime=0.45, LaunchDelay=0.05,
     UseClutch=true, UseGear1=true, UseWheelieHold=false,
+
+    -- Speed Changer
     SpeedEnabled=false, CarTargetKmh=180, BikeTargetKmh=160,
     MaxTargetKmh=320, MinTargetKmh=40,
     AccelRate=0.10, DecelRate=0.25, HysteresisKmh=2.0,
     MaxDeltaKmhPerFrame=6, MinCurrentKmh=5, StudsToKmh=1.008,
+
+    -- AutoShift
     AutoShift=false, ShiftPoint=0.92,
+
+    -- Visual
     ESP=false, ESPColor=Color3.fromRGB(0,255,180), Fullbright=false, NoFog=false,
     FOV=80, NoDrag=false, CameraLock=false, AutoWin=false, AntiAFK=true,
+
+    -- Farm
     AutoCourier=false, AutoBarista=false, AutoOffice=false, FarmQueueMode=false,
     FarmRadius=60, FarmInterval=0.6, TeleportFarm=true,
     TeleportOffset=Vector3.new(0,3,0), ScanAllMaps=true,
+
+    -- Upgrade / Redeem
     AutoUpgrade=false, UpgradeCheck=3.0,
     UpgradePriority={"Engine","Turbo","Weight","Grip","Transmission"},
     AutoRedeem=false,
@@ -52,6 +53,8 @@ local Config = {
         "HBDADVGAMERSTEAM26","DELAYDIKITLAGIFREESTYLE","DRAGDRIVESIMULATORSEPTEMBER26",
     },
     RedeemInterval=5.0,
+
+    -- BETA
     MathSolver=false, MathInterval=1.2, MathSubmit=true,
     GearProbe=false, WheelieProbe=false,
 }
@@ -62,10 +65,10 @@ local State = {
     GearValues={}, WheelieValues={},
     Connections={}, ESPObjects={},
     UI={},
-    LastFarm=0, LastUpgrade=0, LastRedeem=0, LastMath=0,
+    LastUpgrade=0, LastRedeem=0, LastMath=0,
     UpgradeBusy=false, RedeemIndex=1, RedeemBusy=false, MathBusy=false,
     MathLastQ="", MathOK=0, MathFail=0,
-    FarmQueue={"office","barista","courier"}, FarmQueueIdx=1,
+    FarmQueueIdx=1,
     SpeedCurrentKmh=0,
 }
 local function track(c) table.insert(State.Connections, c) return c end
@@ -341,83 +344,164 @@ track(LP.Idled:Connect(function()
 end))
 
 -- ============================================================
--- AUTOFARM
+-- AUTOFARM v1.0 — coroutine, single-pass, no lag
 -- ============================================================
-local JOB_KEYWORDS={
-    courier={"courier","package","delivery","kurir","paket"},
-    barista={"barista","coffee","cafe","kopi","coffeeshop"},
-    office ={"office","kantor","desk","receptionist","resepsionis","admin","computer","komputer"},
+local FarmCache = {
+    SearchRoots = nil,
+    RootsTime = 0,
+    LastScan = 0,
+    ScanCooldown = 1.0,
+    RootsTTL = 10.0,
+    Running = false,
 }
+
+local JOB_KEYWORDS = {
+    courier = {"courier","package","delivery","kurir","paket"},
+    barista = {"barista","coffee","cafe","kopi","coffeeshop"},
+    office  = {"office","kantor","desk","receptionist","resepsionis","admin","computer","komputer"},
+}
+
+local ALL_KEYWORDS = {}
+for job, kws in pairs(JOB_KEYWORDS) do
+    for _, kw in ipairs(kws) do
+        table.insert(ALL_KEYWORDS, {kw = kw, job = job})
+    end
+end
+
 local function getSearchRoots()
     if not Config.ScanAllMaps then return {Workspace} end
-    local roots={Workspace}
-    for _,d in ipairs(Workspace:GetChildren()) do
+    local now = os.clock()
+    if FarmCache.SearchRoots and (now - FarmCache.RootsTime) < FarmCache.RootsTTL then
+        return FarmCache.SearchRoots
+    end
+    local roots = {Workspace}
+    for _, d in ipairs(Workspace:GetChildren()) do
         if d:IsA("Folder") or d:IsA("Model") then
-            local n=d.Name:lower()
+            local n = d.Name:lower()
             if n:find("map") or n:find("surakarta") or n:find("gatsu") or n:find("world") then
-                table.insert(roots,d)
+                table.insert(roots, d)
             end
         end
     end
+    FarmCache.SearchRoots = roots
+    FarmCache.RootsTime = now
     return roots
 end
-local function findFarmTarget(job)
-    local char=LP.Character; local hrp=char and char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return nil end
-    local keywords=JOB_KEYWORDS[job]; if not keywords then return nil end
-    local best, bestD = nil, Config.FarmRadius
-    for _,root in ipairs(getSearchRoots()) do
-        for _,obj in ipairs(root:GetDescendants()) do
+
+local function scanAllTargets()
+    local char = LP.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return {} end
+    local origin = hrp.Position
+    local radius = Config.FarmRadius
+    local best = {}
+    for _, root in ipairs(getSearchRoots()) do
+        for _, obj in ipairs(root:GetChildren()) do
             if obj:IsA("Model") then
-                local n=obj.Name:lower(); local matched=false
-                for _,kw in ipairs(keywords) do if n:find(kw) then matched=true break end end
-                if matched then
-                    local hrpNpc=obj:FindFirstChild("HumanoidRootPart") or obj.PrimaryPart
-                    if hrpNpc then local d=(hrpNpc.Position-hrp.Position).Magnitude if d<bestD then bestD,best=d,hrpNpc end end
+                local nameLower = obj.Name:lower()
+                local matchedJob = nil
+                for _, entry in ipairs(ALL_KEYWORDS) do
+                    if nameLower:find(entry.kw) then matchedJob = entry.job; break end
+                end
+                if matchedJob then
+                    local hrpNpc = obj:FindFirstChild("HumanoidRootPart") or obj.PrimaryPart
+                    if hrpNpc then
+                        local d = (hrpNpc.Position - origin).Magnitude
+                        if d < radius then
+                            local prev = best[matchedJob]
+                            if not prev or d < prev.dist then
+                                best[matchedJob] = {pos = hrpNpc.Position, dist = d}
+                            end
+                        end
+                    end
                 end
             end
         end
     end
     return best
 end
-local function teleportNear(target)
-    local char=LP.Character; local hrp=char and char:FindFirstChild("HumanoidRootPart")
-    if not hrp or not target then return false end
-    hrp.CFrame=CFrame.new(target.Position+Config.TeleportOffset); return true
-end
-local function farmOne(job)
-    local target=findFarmTarget(job); if not target then return false end
-    if Config.TeleportFarm then teleportNear(target) end
-    task.wait(0.08)
-    local btn=findInteractButton()
-    if btn then tapButton(btn,0.1)
-    else
-        local char=LP.Character; local hrp=char and char:FindFirstChild("HumanoidRootPart")
-        if hrp and (target.Position-hrp.Position).Magnitude<10 then
-            local pp=target.Parent and target.Parent:FindFirstChildWhichIsA("ProximityPrompt", true)
-            if pp then pcall(function() fireproximityprompt(pp) end) end
+
+local function teleportAndInteract(targetPos)
+    local char = LP.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp or not targetPos then return false end
+    local dist = (targetPos - hrp.Position).Magnitude
+    if Config.TeleportFarm and dist > 8 then
+        hrp.CFrame = CFrame.new(targetPos + Config.TeleportOffset)
+        task.wait(0.05)
+    end
+    local btn = findInteractButton()
+    if btn then tapButton(btn, 0.1); return true end
+    if dist < 12 then
+        local ray = Ray.new(hrp.Position, (targetPos - hrp.Position).Unit * 15)
+        local hit = Workspace:FindPartOnRay(ray, char)
+        if hit then
+            local pp = hit:FindFirstChildWhichIsA("ProximityPrompt", true)
+                or (hit.Parent and hit.Parent:FindFirstChildWhichIsA("ProximityPrompt", true))
+            if pp then pcall(function() fireproximityprompt(pp) end); return true end
         end
     end
-    return true
+    return false
 end
-track(RunService.Heartbeat:Connect(function()
-    if os.clock()-State.LastFarm<Config.FarmInterval then return end
-    local anyJob=Config.AutoCourier or Config.AutoBarista or Config.AutoOffice or Config.FarmQueueMode
-    if not anyJob then return end
-    if Config.FarmQueueMode then
-        local job=State.FarmQueue[State.FarmQueueIdx]
-        if farmOne(job) then
-            State.LastFarm=os.clock(); State.FarmQueueIdx=State.FarmQueueIdx+1
-            if State.FarmQueueIdx>#State.FarmQueue then State.FarmQueueIdx=1 end
+
+local function farmLoop()
+    if FarmCache.Running then return end
+    FarmCache.Running = true
+    while Config.AutoCourier or Config.AutoBarista or Config.AutoOffice or Config.FarmQueueMode do
+        local now = os.clock()
+        if (now - FarmCache.LastScan) >= FarmCache.ScanCooldown then
+            FarmCache.LastScan = now
+            local jobsToScan = {}
+            if Config.FarmQueueMode then
+                jobsToScan = {"office", "barista", "courier"}
+            else
+                if Config.AutoCourier then table.insert(jobsToScan, "courier") end
+                if Config.AutoBarista then table.insert(jobsToScan, "barista") end
+                if Config.AutoOffice then table.insert(jobsToScan, "office") end
+            end
+            if #jobsToScan > 0 then
+                local targets = scanAllTargets()
+                local chosenJob, chosenTarget = nil, nil
+                if Config.FarmQueueMode then
+                    for i = 0, #jobsToScan - 1 do
+                        local idx = ((State.FarmQueueIdx - 1 + i) % #jobsToScan) + 1
+                        local job = jobsToScan[idx]
+                        if targets[job] then
+                            chosenJob, chosenTarget = job, targets[job]
+                            State.FarmQueueIdx = (idx % #jobsToScan) + 1
+                            break
+                        end
+                    end
+                else
+                    local bestDist = math.huge
+                    for _, job in ipairs(jobsToScan) do
+                        local t = targets[job]
+                        if t and t.dist < bestDist then
+                            bestDist = t.dist
+                            chosenJob, chosenTarget = job, t
+                        end
+                    end
+                end
+                if chosenJob and chosenTarget then
+                    teleportAndInteract(chosenTarget.pos)
+                end
+            end
         end
-    else
-        local job=nil
-        if Config.AutoCourier then job="courier"
-        elseif Config.AutoBarista then job="barista"
-        elseif Config.AutoOffice then job="office" end
-        if job and farmOne(job) then State.LastFarm=os.clock() end
+        task.wait(Config.FarmInterval)
     end
-end))
+    FarmCache.Running = false
+end
+
+local function ensureFarmLoop()
+    local shouldRun = Config.AutoCourier or Config.AutoBarista or Config.AutoOffice or Config.FarmQueueMode
+    if shouldRun and not FarmCache.Running then
+        task.spawn(farmLoop)
+    end
+end
+
+task.spawn(function()
+    while task.wait(1.0) do ensureFarmLoop() end
+end)
 
 -- ============================================================
 -- AUTOUPGRADE / REDEEM
@@ -812,7 +896,7 @@ local function buildUI()
     warn(string.format("[DDS] Building UI. Viewport: %dx%d. Host: %s", vp.X, vp.Y, tostring(GuiHost)))
 
     local sg = Instance.new("ScreenGui")
-    sg.Name="DDS_v20"; sg.ResetOnSpawn=false; sg.IgnoreGuiInset=true
+    sg.Name="DDS_v10"; sg.ResetOnSpawn=false; sg.IgnoreGuiInset=true
     sg.ZIndexBehavior=Enum.ZIndexBehavior.Sibling; sg.DisplayOrder=9999
     sg.Enabled=true; sg.Parent=GuiHost
     if not sg.Parent then
@@ -824,7 +908,6 @@ local function buildUI()
     if not sg.Parent then warn("[DDS] ScreenGui hilang setelah 1 frame — abort") return end
     State.UI.Gui = sg
 
-    -- FAB dulu (fallback jika panel gagal)
     local fab=Instance.new("TextButton")
     fab.Name="DDS_FAB"
     fab.Size=UDim2.new(0,56,0,56); fab.Position=UDim2.new(0,20,0,100)
@@ -833,7 +916,7 @@ local function buildUI()
     fab.Font=Enum.Font.GothamBold; fab.TextSize=22; fab.ZIndex=100
     fab.Visible=true; fab.Parent=sg
     makeCorner(fab,28)
-    local fabStroke=makeStroke(fab,THEME.accent,2,0.3)
+    makeStroke(fab,THEME.accent,2,0.3)
     makeGradient(fab,THEME.accentDim,THEME.accent)
 
     local shadow=Instance.new("Frame")
@@ -873,7 +956,7 @@ local function buildUI()
     title.Size=UDim2.new(1,-100,1,0); title.Position=UDim2.new(0,28,0,0)
     title.BackgroundTransparency=1; title.TextColor3=THEME.text
     title.Font=Enum.Font.GothamBold; title.TextSize=13
-    title.TextXAlignment=Enum.TextXAlignment.Left; title.Text="DDS v2.0"; title.Parent=header
+    title.TextXAlignment=Enum.TextXAlignment.Left; title.Text="DDS v1.0"; title.Parent=header
 
     local badge=Instance.new("TextLabel")
     badge.Size=UDim2.new(0,52,0,18); badge.Position=UDim2.new(1,-90,0.5,-9)
@@ -1079,7 +1162,6 @@ local function buildUI()
     selectTab("DRIVE")
     task.defer(function() task.wait(0.1); selectTab("DRIVE") end)
 
-    -- Verify & force position
     task.wait(0.2)
     local vpCheck=getViewport()
     local mainAbsPos=main.AbsolutePosition; local mainAbsSize=main.AbsoluteSize
@@ -1100,7 +1182,6 @@ local function buildUI()
         main.Visible=not main.Visible; shadow.Visible=main.Visible
     end))
 
-    -- Diagnostic
     task.spawn(function()
         task.wait(1)
         warn("[DDS] === DIAGNOSTIC ===")
