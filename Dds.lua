@@ -1,12 +1,17 @@
--- Drag Drive Simulator — All-in-One Mobile v1.8
+-- Drag Drive Simulator — All-in-One Mobile v2.0
 -- Target game: Beta V1.1.9
--- Executor: Arceus X (primary), Delta, Fluxus, Codex
--- Changelog v1.8 (dari v1.7):
---   [~] Speed Changer: multiplier dihapus, diganti target km/h absolut
---   [+] Slider: Car Target, Bike Target, Max Target, Accel Rate, Decel Rate, Hysteresis
---   [~] Default: mobil 180 km/h, motor 160 km/h — nilai realistis, tidak kaget
---   [+] Easing sine per-frame — naik/turun halus dengan proximity curve
---   [-] ApplyBias, CarMultiplier, BikeMultiplier, MaxRatio dihapus dari config
+-- Executor: Arceus X, Delta, Fluxus, Codex, Hydrogen
+-- Changelog v2.0 (dari v1.8):
+--   [+] Host resolver berlapis: gethui() → CoreGui → PlayerGui → Workspace
+--   [+] Wait camera ready sebelum build (anti viewport 0)
+--   [+] Validate ScreenGui.Parent setelah assign
+--   [+] Panel default hidden, verify posisi/size, baru show
+--   [+] FAB fallback posisi absolut (selalu muncul)
+--   [+] Diagnostic log ke console
+--   [+] Auto-retry host fallback setelah 3s
+--   [+] Fix slider drag di touch (InputChanged global)
+--   [+] Fix shadow 0x0, applyLayout timing, tab warna reset
+--   [+] Label adaptif di compact mode (tidak truncate)
 
 local Players           = game:GetService("Players")
 local RunService        = game:GetService("RunService")
@@ -17,50 +22,28 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local VirtualUser       = game:GetService("VirtualUser")
 local VIM               = game:GetService("VirtualInputManager")
 local TweenService      = game:GetService("TweenService")
+local GuiService        = game:GetService("GuiService")
 
 local LP = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
 local PlayerGui = LP:WaitForChild("PlayerGui")
 
-local GuiHost = PlayerGui
-pcall(function()
-    if game:GetService("CoreGui") then GuiHost = game:GetService("CoreGui") end
-end)
-
 -- ============================================================
 -- CONFIG
 -- ============================================================
 local Config = {
-    -- Perfect Start
-    PerfectStart=true == false, LaunchRPM=0.62, LaunchRampTime=0.45, LaunchDelay=0.05,
+    PerfectStart=false, LaunchRPM=0.62, LaunchRampTime=0.45, LaunchDelay=0.05,
     UseClutch=true, UseGear1=true, UseWheelieHold=false,
-
-    -- Speed Changer (target model, km/h)
-    SpeedEnabled       = false,
-    CarTargetKmh       = 180,
-    BikeTargetKmh      = 160,
-    MaxTargetKmh       = 320,
-    MinTargetKmh       = 40,
-    AccelRate          = 0.10,
-    DecelRate          = 0.25,
-    HysteresisKmh      = 2.0,
-    MaxDeltaKmhPerFrame = 6,
-    MinCurrentKmh      = 5,
-    StudsToKmh         = 1.008,   -- kalibrasi di game lo
-
-    -- AutoShift
+    SpeedEnabled=false, CarTargetKmh=180, BikeTargetKmh=160,
+    MaxTargetKmh=320, MinTargetKmh=40,
+    AccelRate=0.10, DecelRate=0.25, HysteresisKmh=2.0,
+    MaxDeltaKmhPerFrame=6, MinCurrentKmh=5, StudsToKmh=1.008,
     AutoShift=false, ShiftPoint=0.92,
-
-    -- Visual
     ESP=false, ESPColor=Color3.fromRGB(0,255,180), Fullbright=false, NoFog=false,
     FOV=80, NoDrag=false, CameraLock=false, AutoWin=false, AntiAFK=true,
-
-    -- Farm
     AutoCourier=false, AutoBarista=false, AutoOffice=false, FarmQueueMode=false,
     FarmRadius=60, FarmInterval=0.6, TeleportFarm=true,
     TeleportOffset=Vector3.new(0,3,0), ScanAllMaps=true,
-
-    -- Upgrade / Redeem
     AutoUpgrade=false, UpgradeCheck=3.0,
     UpgradePriority={"Engine","Turbo","Weight","Grip","Transmission"},
     AutoRedeem=false,
@@ -69,8 +52,6 @@ local Config = {
         "HBDADVGAMERSTEAM26","DELAYDIKITLAGIFREESTYLE","DRAGDRIVESIMULATORSEPTEMBER26",
     },
     RedeemInterval=5.0,
-
-    -- BETA
     MathSolver=false, MathInterval=1.2, MathSubmit=true,
     GearProbe=false, WheelieProbe=false,
 }
@@ -253,62 +234,42 @@ track(RunService.Heartbeat:Connect(function()
 end))
 
 -- ============================================================
--- SPEED CHANGER — TARGET KM/H MODEL
+-- SPEED CHANGER
 -- ============================================================
 local Easing = {
-    linear = function(t) return t end,
-    sine   = function(t) return math.sin(t*math.pi*0.5) end,
-    quad   = function(t) return 1-(1-t)*(1-t) end,
-    smooth = function(t) return t*t*(3-2*t) end,
+    linear=function(t) return t end,
+    sine=function(t) return math.sin(t*math.pi*0.5) end,
+    quad=function(t) return 1-(1-t)*(1-t) end,
+    smooth=function(t) return t*t*(3-2*t) end,
 }
 local function ease(t) return Easing.sine(math.clamp(t,0,1)) end
 
 track(RunService.Stepped:Connect(function()
     if not Config.SpeedEnabled or not State.Ready then
-        State.SpeedCurrentKmh = 0
-        return
+        State.SpeedCurrentKmh=0; return
     end
     local root=State.VehicleRoot
     if not root or not root.Parent then return end
-
     local targetKmh = State.IsBike and Config.BikeTargetKmh or Config.CarTargetKmh
     targetKmh = math.clamp(targetKmh, Config.MinTargetKmh, Config.MaxTargetKmh)
-
-    local vel = root.AssemblyLinearVelocity
-    local mag = vel.Magnitude
-    if mag < 1 then return end
-    local currentKmh = mag * Config.StudsToKmh
-    if currentKmh < Config.MinCurrentKmh then return end
-
-    local diff = targetKmh - currentKmh
-    if math.abs(diff) < Config.HysteresisKmh then
-        State.SpeedCurrentKmh = currentKmh
-        return
-    end
-
-    local rate = (diff > 0) and Config.AccelRate or Config.DecelRate
-    local proximity = 1 - math.clamp(math.abs(diff)/targetKmh, 0, 1)
-    local easedRate = math.max(rate*ease(proximity), rate*0.2)
-
-    local deltaKmh = diff*easedRate
-    deltaKmh = math.clamp(deltaKmh, -Config.MaxDeltaKmhPerFrame, Config.MaxDeltaKmhPerFrame)
-
-    local deltaStuds = deltaKmh / Config.StudsToKmh
-    local newMag = mag + deltaStuds
-
-    if diff > 0 and newMag*Config.StudsToKmh > targetKmh then
-        newMag = targetKmh/Config.StudsToKmh
-    elseif diff < 0 and newMag*Config.StudsToKmh < targetKmh then
-        newMag = targetKmh/Config.StudsToKmh
-    end
-
-    root.AssemblyLinearVelocity = vel.Unit*newMag
-    State.SpeedCurrentKmh = newMag*Config.StudsToKmh
+    local vel=root.AssemblyLinearVelocity; local mag=vel.Magnitude
+    if mag<1 then return end
+    local currentKmh=mag*Config.StudsToKmh
+    if currentKmh<Config.MinCurrentKmh then return end
+    local diff=targetKmh-currentKmh
+    if math.abs(diff)<Config.HysteresisKmh then State.SpeedCurrentKmh=currentKmh; return end
+    local rate=(diff>0) and Config.AccelRate or Config.DecelRate
+    local proximity=1-math.clamp(math.abs(diff)/targetKmh,0,1)
+    local easedRate=math.max(rate*ease(proximity), rate*0.2)
+    local deltaKmh=math.clamp(diff*easedRate, -Config.MaxDeltaKmhPerFrame, Config.MaxDeltaKmhPerFrame)
+    local deltaStuds=deltaKmh/Config.StudsToKmh
+    local newMag=mag+deltaStuds
+    if diff>0 and newMag*Config.StudsToKmh>targetKmh then newMag=targetKmh/Config.StudsToKmh
+    elseif diff<0 and newMag*Config.StudsToKmh<targetKmh then newMag=targetKmh/Config.StudsToKmh end
+    root.AssemblyLinearVelocity=vel.Unit*newMag
+    State.SpeedCurrentKmh=newMag*Config.StudsToKmh
 end))
 
--- ============================================================
--- NODRAG
--- ============================================================
 track(RunService.Stepped:Connect(function()
     if not Config.NoDrag then return end
     local root=State.VehicleRoot
@@ -505,7 +466,7 @@ track(RunService.Heartbeat:Connect(function()
 end))
 
 -- ============================================================
--- MATH SOLVER (BETA)
+-- MATH SOLVER
 -- ============================================================
 local OP_MAP={["×"]="*",["x"]="*",["X"]="*",["÷"]="/",["−"]="-",["–"]="-",["—"]="-",["％"]="%",["²"]="^2",["³"]="^3"}
 local function normalize(text)
@@ -639,7 +600,62 @@ task.spawn(function()
 end)
 
 -- ============================================================
--- UI
+-- UI HOST RESOLVER
+-- ============================================================
+local function resolveGuiHost()
+    local candidates = {}
+    pcall(function()
+        if gethui then
+            local h = gethui()
+            if h then table.insert(candidates, {name="gethui()", host=h}) end
+        end
+    end)
+    pcall(function()
+        local cg = game:GetService("CoreGui")
+        if cg then table.insert(candidates, {name="CoreGui", host=cg}) end
+    end)
+    local pg = LP:FindFirstChild("PlayerGui") or LP:WaitForChild("PlayerGui", 3)
+    if pg then table.insert(candidates, {name="PlayerGui", host=pg}) end
+    table.insert(candidates, {name="Workspace", host=Workspace})
+    for _, c in ipairs(candidates) do
+        local ok = pcall(function()
+            local test = Instance.new("ScreenGui")
+            test.Name = "_DDS_Test_" .. tick()
+            test.ResetOnSpawn = false
+            test.Parent = c.host
+            if not test.Parent then error("nil") end
+            task.wait(0.05)
+            test:Destroy()
+        end)
+        if ok then
+            warn("[DDS] GUI host resolved: " .. c.name)
+            return c.host
+        else
+            warn("[DDS] GUI host failed: " .. c.name)
+        end
+    end
+    return pg
+end
+
+local GuiHost = resolveGuiHost()
+
+local function waitCameraReady()
+    local start = os.clock()
+    while os.clock() - start < 5 do
+        local cam = Workspace.CurrentCamera
+        if cam and cam.ViewportSize.X > 0 and cam.ViewportSize.Y > 0 then
+            warn(string.format("[DDS] Camera ready: %dx%d", cam.ViewportSize.X, cam.ViewportSize.Y))
+            return true
+        end
+        task.wait(0.1)
+    end
+    warn("[DDS] Camera timeout, proceeding anyway")
+    return false
+end
+waitCameraReady()
+
+-- ============================================================
+-- UI THEME & HELPERS
 -- ============================================================
 local THEME = {
     bg=Color3.fromRGB(18,20,26), bgLight=Color3.fromRGB(28,30,38), bgRow=Color3.fromRGB(32,34,44),
@@ -653,13 +669,13 @@ local TAB_META={
     FARM={label="FARM",icon="⛏"}, SHOP={label="SHOP",icon="🛒"}, BETA={label="BETA",icon="⚠"},
 }
 local function getViewport()
-    local vp=workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize
+    local vp=Workspace.CurrentCamera and Workspace.CurrentCamera.ViewportSize
     if not vp or vp.X==0 then return Vector2.new(800,450) end
     return vp
 end
 local function getSafeArea()
     local top,bottom=0,16
-    pcall(function() top=game:GetService("GuiService"):GetGuiInset().Y end)
+    pcall(function() top=GuiService:GetGuiInset().Y end)
     return {top=top,bottom=bottom}
 end
 local function makeCorner(p,r)
@@ -674,7 +690,9 @@ local function makeGradient(p,c1,c2)
     local g=Instance.new("UIGradient"); g.Color=ColorSequence.new(c1,c2); g.Rotation=90; g.Parent=p; return g
 end
 
--- Toggle switch
+-- ============================================================
+-- UI COMPONENTS
+-- ============================================================
 local function createToggleSwitch(parent,key,label,order,callback,isBeta)
     local row=Instance.new("Frame")
     row.Size=UDim2.new(1,0,0,40)
@@ -683,32 +701,27 @@ local function createToggleSwitch(parent,key,label,order,callback,isBeta)
     row:SetAttribute("IsToggleRow",true)
     makeCorner(row,10)
     makeStroke(row, isBeta and THEME.accentBetaDim or THEME.bgLight,1,0.7)
-
     local lbl=Instance.new("TextLabel")
     lbl.Size=UDim2.new(1,-70,1,0); lbl.Position=UDim2.new(0,12,0,0)
     lbl.BackgroundTransparency=1; lbl.TextColor3=THEME.text
     lbl.Font=Enum.Font.GothamMedium; lbl.TextSize=12
     lbl.TextXAlignment=Enum.TextXAlignment.Left; lbl.TextTruncate=Enum.TextTruncate.AtEnd
     lbl.Text=(isBeta and "⚠ " or "")..label; lbl.Parent=row
-
-    local track=Instance.new("Frame")
-    track.Size=UDim2.new(0,40,0,20); track.Position=UDim2.new(1,-52,0.5,-10)
-    track.BackgroundColor3=Color3.fromRGB(60,62,72); track.BorderSizePixel=0; track.Parent=row
-    makeCorner(track,10)
-    local trackGrad=makeGradient(track, Color3.fromRGB(50,52,62), Color3.fromRGB(70,72,84))
-
+    row:SetAttribute("Label", lbl)
+    local track2=Instance.new("Frame")
+    track2.Size=UDim2.new(0,40,0,20); track2.Position=UDim2.new(1,-52,0.5,-10)
+    track2.BackgroundColor3=Color3.fromRGB(60,62,72); track2.BorderSizePixel=0; track2.Parent=row
+    makeCorner(track2,10)
+    local trackGrad=makeGradient(track2,Color3.fromRGB(50,52,62),Color3.fromRGB(70,72,84))
     local knob=Instance.new("Frame")
     knob.Size=UDim2.new(0,16,0,16); knob.Position=UDim2.new(0,2,0.5,-8)
-    knob.BackgroundColor3=Color3.fromRGB(220,222,230); knob.BorderSizePixel=0; knob.Parent=track
+    knob.BackgroundColor3=Color3.fromRGB(220,222,230); knob.BorderSizePixel=0; knob.Parent=track2
     makeCorner(knob,8)
-
     local click=Instance.new("TextButton")
     click.Size=UDim2.new(1,0,1,0); click.BackgroundTransparency=1; click.Text=""; click.Parent=row
-
     track(click.MouseButton1Click:Connect(function()
-        Config[key]=not Config[key]
-        local on=Config[key]
-        TweenService:Create(track,TweenInfo.new(0.18,Enum.EasingStyle.Quad),{
+        Config[key]=not Config[key]; local on=Config[key]
+        TweenService:Create(track2,TweenInfo.new(0.18,Enum.EasingStyle.Quad),{
             BackgroundColor3=on and THEME.accentDim or Color3.fromRGB(60,62,72)}):Play()
         TweenService:Create(knob,TweenInfo.new(0.18,Enum.EasingStyle.Quad),{
             Position=on and UDim2.new(1,-18,0.5,-8) or UDim2.new(0,2,0.5,-8)}):Play()
@@ -719,7 +732,6 @@ local function createToggleSwitch(parent,key,label,order,callback,isBeta)
     return row
 end
 
--- Drag slider
 local function createDragSlider(parent,key,label,min,max,step,order,suffix)
     suffix=suffix or ""
     local row=Instance.new("Frame")
@@ -728,39 +740,35 @@ local function createDragSlider(parent,key,label,min,max,step,order,suffix)
     row.BorderSizePixel=0; row.LayoutOrder=order; row.Parent=parent
     row:SetAttribute("IsSliderRow",true)
     makeCorner(row,10); makeStroke(row,THEME.bgLight,1,0.7)
-
     local lbl=Instance.new("TextLabel")
     lbl.Size=UDim2.new(1,-60,0,20); lbl.Position=UDim2.new(0,12,0,6)
     lbl.BackgroundTransparency=1; lbl.TextColor3=THEME.textDim
     lbl.Font=Enum.Font.Gotham; lbl.TextSize=11
     lbl.TextXAlignment=Enum.TextXAlignment.Left; lbl.Text=label; lbl.Parent=row
-
+    row:SetAttribute("Label", lbl)
     local val=Instance.new("TextLabel")
     val.Size=UDim2.new(0,60,0,20); val.Position=UDim2.new(1,-72,0,6)
     val.BackgroundTransparency=1; val.TextColor3=THEME.accent
     val.Font=Enum.Font.GothamBold; val.TextSize=12
     val.TextXAlignment=Enum.TextXAlignment.Right
     val.Text=string.format("%.2f",Config[key])..suffix; val.Parent=row
-
     local trackBg=Instance.new("Frame")
     trackBg.Size=UDim2.new(1,-24,0,6); trackBg.Position=UDim2.new(0,12,0,34)
     trackBg.BackgroundColor3=Color3.fromRGB(50,52,62); trackBg.BorderSizePixel=0; trackBg.Parent=row
     makeCorner(trackBg,3)
-
     local fill=Instance.new("Frame")
     fill.Size=UDim2.new((Config[key]-min)/(max-min),0,1,0)
     fill.BackgroundColor3=THEME.accent; fill.BorderSizePixel=0; fill.Parent=trackBg
     makeCorner(fill,3); makeGradient(fill,THEME.accentDim,THEME.accent)
-
     local knob=Instance.new("Frame")
     knob.Size=UDim2.new(0,14,0,14)
     knob.Position=UDim2.new((Config[key]-min)/(max-min),-7,0.5,-7)
     knob.BackgroundColor3=Color3.fromRGB(240,242,248); knob.BorderSizePixel=0; knob.Parent=trackBg
     makeCorner(knob,7); makeStroke(knob,THEME.accent,2,0)
-
     local function setFromX(absX)
         local trackAbsX=trackBg.AbsolutePosition.X
         local trackW=trackBg.AbsoluteSize.X
+        if trackW<=0 then return end
         local ratio=math.clamp((absX-trackAbsX)/trackW,0,1)
         local raw=min+ratio*(max-min)
         local snapped=math.floor(raw/step+0.5)*step
@@ -769,15 +777,16 @@ local function createDragSlider(parent,key,label,min,max,step,order,suffix)
         fill.Size=UDim2.new(r,0,1,0); knob.Position=UDim2.new(r,-7,0.5,-7)
         val.Text=string.format("%.2f",Config[key])..suffix
     end
-
     local dragging=false
     local click=Instance.new("TextButton")
     click.Size=UDim2.new(1,0,0,40); click.Position=UDim2.new(0,0,0,16)
     click.BackgroundTransparency=1; click.Text=""; click.Parent=row
     track(click.MouseButton1Down:Connect(function(x) dragging=true; setFromX(x) end))
-    track(click.MouseMoved:Connect(function(x) if dragging then setFromX(x) end end))
     track(UserInput.InputChanged:Connect(function(input)
-        if dragging and (input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch) then
+        if not dragging then return end
+        if input.UserInputType==Enum.UserInputType.MouseMovement
+           or input.UserInputType==Enum.UserInputType.MouseButton1
+           or input.UserInputType==Enum.UserInputType.Touch then
             setFromX(input.Position.X)
         end
     end))
@@ -786,26 +795,62 @@ local function createDragSlider(parent,key,label,min,max,step,order,suffix)
             dragging=false
         end
     end))
-    track(click.MouseButton1Up:Connect(function() dragging=false end))
+    track(click.MouseMoved:Connect(function(x) if dragging then setFromX(x) end end))
     return row
 end
 
+-- ============================================================
+-- BUILD UI
+-- ============================================================
 local function buildUI()
-    local sg=Instance.new("ScreenGui")
-    sg.Name="DDS_v18"; sg.ResetOnSpawn=false; sg.IgnoreGuiInset=true
-    sg.ZIndexBehavior=Enum.ZIndexBehavior.Sibling; sg.DisplayOrder=999; sg.Parent=GuiHost
-    State.UI.Gui=sg
+    pcall(function()
+        for _, old in ipairs(GuiHost:GetChildren()) do
+            if old.Name:sub(1, 4) == "DDS_" then old:Destroy() end
+        end
+    end)
+    local vp = getViewport()
+    warn(string.format("[DDS] Building UI. Viewport: %dx%d. Host: %s", vp.X, vp.Y, tostring(GuiHost)))
+
+    local sg = Instance.new("ScreenGui")
+    sg.Name="DDS_v20"; sg.ResetOnSpawn=false; sg.IgnoreGuiInset=true
+    sg.ZIndexBehavior=Enum.ZIndexBehavior.Sibling; sg.DisplayOrder=9999
+    sg.Enabled=true; sg.Parent=GuiHost
+    if not sg.Parent then
+        warn("[DDS] ScreenGui.Parent nil — fallback to PlayerGui")
+        local fb = LP:FindFirstChild("PlayerGui")
+        if fb then sg.Parent = fb; GuiHost = fb else return end
+    end
+    task.wait(0.1)
+    if not sg.Parent then warn("[DDS] ScreenGui hilang setelah 1 frame — abort") return end
+    State.UI.Gui = sg
+
+    -- FAB dulu (fallback jika panel gagal)
+    local fab=Instance.new("TextButton")
+    fab.Name="DDS_FAB"
+    fab.Size=UDim2.new(0,56,0,56); fab.Position=UDim2.new(0,20,0,100)
+    fab.BackgroundColor3=THEME.accentDim; fab.BorderSizePixel=0
+    fab.Text="⚡"; fab.TextColor3=Color3.fromRGB(255,255,255)
+    fab.Font=Enum.Font.GothamBold; fab.TextSize=22; fab.ZIndex=100
+    fab.Visible=true; fab.Parent=sg
+    makeCorner(fab,28)
+    local fabStroke=makeStroke(fab,THEME.accent,2,0.3)
+    makeGradient(fab,THEME.accentDim,THEME.accent)
 
     local shadow=Instance.new("Frame")
+    shadow.Name="DDS_Shadow"
     shadow.BackgroundColor3=Color3.fromRGB(0,0,0); shadow.BackgroundTransparency=0.6
-    shadow.BorderSizePixel=0; shadow.ZIndex=0; shadow.Parent=sg
+    shadow.BorderSizePixel=0; shadow.ZIndex=0
+    shadow.Size=UDim2.new(0,328,0,488); shadow.Position=UDim2.new(0,12,0.5,-244)
+    shadow.Visible=false; shadow.Parent=sg
     makeCorner(shadow,16)
 
     local main=Instance.new("Frame")
+    main.Name="DDS_MainPanel"
     main.AnchorPoint=Vector2.new(0,0.5); main.Position=UDim2.new(0,16,0.5,0)
+    main.Size=UDim2.new(0,320,0,480)
     main.BackgroundColor3=THEME.bg; main.BackgroundTransparency=0.05
     main.BorderSizePixel=0; main.Active=true; main.Draggable=true
-    main.ZIndex=1; main.Parent=sg
+    main.ZIndex=1; main.Visible=false; main.Parent=sg
     makeCorner(main,14); makeStroke(main,THEME.stroke,1.5,0.4)
     makeGradient(main,Color3.fromRGB(22,24,32),Color3.fromRGB(14,16,22))
 
@@ -828,7 +873,7 @@ local function buildUI()
     title.Size=UDim2.new(1,-100,1,0); title.Position=UDim2.new(0,28,0,0)
     title.BackgroundTransparency=1; title.TextColor3=THEME.text
     title.Font=Enum.Font.GothamBold; title.TextSize=13
-    title.TextXAlignment=Enum.TextXAlignment.Left; title.Text="DDS v1.8"; title.Parent=header
+    title.TextXAlignment=Enum.TextXAlignment.Left; title.Text="DDS v2.0"; title.Parent=header
 
     local badge=Instance.new("TextLabel")
     badge.Size=UDim2.new(0,52,0,18); badge.Position=UDim2.new(1,-90,0.5,-9)
@@ -848,6 +893,7 @@ local function buildUI()
     end))
 
     local contentArea=Instance.new("Frame")
+    contentArea.Size=UDim2.new(1,-12,1,-100); contentArea.Position=UDim2.new(0,6,0,42)
     contentArea.BackgroundTransparency=1; contentArea.ZIndex=2
     contentArea.ClipsDescendants=true; contentArea.Parent=main
 
@@ -855,8 +901,9 @@ local function buildUI()
     local tabNames={"DRIVE","VISUAL","FARM","SHOP","BETA"}
     local function selectTab(name)
         for n,pg in pairs(pages) do pg.Visible=(n==name) end
-        if State.UI.TabBar then
-            for _,c in ipairs(State.UI.TabBar:GetChildren()) do
+        local bar=State.UI.TabBar
+        if bar then
+            for _,c in ipairs(bar:GetChildren()) do
                 if c:IsA("TextButton") and c:GetAttribute("IsTab") then
                     local active=(c.Name==name); local beta=(c.Name=="BETA")
                     c.BackgroundColor3=active and (beta and THEME.accentBetaDim or THEME.accentDim) or THEME.bgLight
@@ -917,21 +964,29 @@ local function buildUI()
     end
 
     local function applyLayout()
-        local vp=getViewport(); local sa=getSafeArea()
-        local vw=vp.X; local vh=vp.Y-sa.top-sa.bottom
+        local vp2=getViewport(); local sa=getSafeArea()
+        local vw=vp2.X; local vh=vp2.Y-sa.top-sa.bottom
         local panelW=math.min(320,vw-32)
         local panelH=math.max(260,math.min(480,vh-24))
         main.Size=UDim2.new(0,panelW,0,panelH)
         shadow.Size=UDim2.new(0,panelW+8,0,panelH+8)
         shadow.Position=UDim2.new(0,12,0.5,-panelH/2-4)
-        contentArea.Size=UDim2.new(1,-12,1,-40-48-12)
-        contentArea.Position=UDim2.new(0,6,0,40+2)
+        contentArea.Size=UDim2.new(1,-12,1,-100)
+        contentArea.Position=UDim2.new(0,6,0,42)
         local compact=vh<400
-        for _,row in ipairs(contentArea:GetDescendants()) do
-            if row:IsA("Frame") and row:GetAttribute("IsToggleRow") then
-                row.Size=UDim2.new(1,0,0,compact and 36 or 40)
-            elseif row:IsA("Frame") and row:GetAttribute("IsSliderRow") then
-                row.Size=UDim2.new(1,0,0,compact and 50 or 56)
+        local toggleH = compact and 34 or 40
+        local sliderH = compact and 50 or 56
+        local labelSize = compact and 11 or 12
+        local sliderLabelSize = compact and 10 or 11
+        for _,item in ipairs(contentArea:GetDescendants()) do
+            if item:IsA("Frame") and item:GetAttribute("IsToggleRow") then
+                item.Size=UDim2.new(1,0,0,toggleH)
+                local lbl=item:GetAttribute("Label")
+                if lbl and lbl:IsA("TextLabel") then lbl.TextSize=labelSize end
+            elseif item:IsA("Frame") and item:GetAttribute("IsSliderRow") then
+                item.Size=UDim2.new(1,0,0,sliderH)
+                local lbl=item:GetAttribute("Label")
+                if lbl and lbl:IsA("TextLabel") then lbl.TextSize=sliderLabelSize end
             end
         end
     end
@@ -954,10 +1009,11 @@ local function buildUI()
     createToggleSwitch(pDrive,"NoDrag","No Drag",13)
 
     local info=Instance.new("TextLabel")
-    info.Size=UDim2.new(1,0,0,40); info.BackgroundColor3=THEME.bgLight; info.BackgroundTransparency=0.3
-    info.BorderSizePixel=0; info.TextColor3=THEME.accentBeta
-    info.Font=Enum.Font.Gotham; info.TextSize=10; info.TextWrapped=true
-    info.LayoutOrder=99; info.Text="  Kategori: -"; info.TextXAlignment=Enum.TextXAlignment.Left
+    info.Size=UDim2.new(1,0,0,40); info.BackgroundColor3=THEME.bgLight
+    info.BackgroundTransparency=0.3; info.BorderSizePixel=0
+    info.TextColor3=THEME.accentBeta; info.Font=Enum.Font.Gotham
+    info.TextSize=10; info.TextWrapped=true; info.LayoutOrder=99
+    info.Text="  Kategori: -"; info.TextXAlignment=Enum.TextXAlignment.Left
     info.Parent=pDrive; makeCorner(info,8); makeStroke(info,THEME.accentBetaDim,1,0.7)
     State.UI.InfoLabel=info
 
@@ -977,9 +1033,7 @@ local function buildUI()
     createToggleSwitch(pFarm,"AutoOffice","Auto Office",1,function(v) if v then Config.AutoBarista=false; Config.AutoCourier=false; Config.FarmQueueMode=false end end)
     createToggleSwitch(pFarm,"AutoBarista","Auto Barista",2,function(v) if v then Config.AutoOffice=false; Config.AutoCourier=false; Config.FarmQueueMode=false end end)
     createToggleSwitch(pFarm,"AutoCourier","Auto Courier",3,function(v) if v then Config.AutoOffice=false; Config.AutoBarista=false; Config.FarmQueueMode=false end end)
-    createToggleSwitch(pFarm,"FarmQueueMode","Farm Queue",4,function(v)
-        if v then Config.AutoOffice=false; Config.AutoBarista=false; Config.AutoCourier=false end
-    end)
+    createToggleSwitch(pFarm,"FarmQueueMode","Farm Queue",4,function(v) if v then Config.AutoOffice=false; Config.AutoBarista=false; Config.AutoCourier=false end end)
     createToggleSwitch(pFarm,"TeleportFarm","Teleport",5)
     createToggleSwitch(pFarm,"ScanAllMaps","Scan All Maps",6)
     createDragSlider(pFarm,"FarmRadius","Scan Radius",20,200,10,7," st")
@@ -1003,7 +1057,6 @@ local function buildUI()
     notice.Text="  ⚠  BETA — fitur eksperimental. Cek console sebelum lapor bug."
     notice.TextXAlignment=Enum.TextXAlignment.Left; notice.Parent=pBeta
     makeCorner(notice,8); makeStroke(notice,THEME.accentBeta,1,0.6)
-
     createToggleSwitch(pBeta,"MathSolver","Auto Solve Math",1,nil,true)
     createToggleSwitch(pBeta,"MathSubmit","Auto Submit Answer",2,nil,true)
     createDragSlider(pBeta,"MathInterval","Solve Interval",0.5,5.0,0.1,3,"s")
@@ -1018,23 +1071,68 @@ local function buildUI()
     createToggleSwitch(pBeta,"WheelieProbe","Wheelie State Probe",6,nil,true)
 
     applyLayout()
-    State.UI.ViewportConn=track(workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(applyLayout))
-    track(workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
-        task.wait(0.1); if workspace.CurrentCamera then applyLayout() end
+    State.UI.ViewportConn=track(Workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(applyLayout))
+    track(Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
+        task.wait(0.1); if Workspace.CurrentCamera then applyLayout() end
     end))
 
     selectTab("DRIVE")
+    task.defer(function() task.wait(0.1); selectTab("DRIVE") end)
 
-    local fab=Instance.new("TextButton")
-    fab.Size=UDim2.new(0,48,0,48); fab.Position=UDim2.new(0,16,0,80)
-    fab.BackgroundColor3=THEME.accentDim; fab.BorderSizePixel=0
-    fab.Text="⚡"; fab.TextColor3=THEME.text; fab.Font=Enum.Font.GothamBold; fab.TextSize=20
-    fab.ZIndex=10; fab.Parent=sg
-    makeCorner(fab,24); makeStroke(fab,THEME.accent,2,0.3); makeGradient(fab,THEME.accentDim,THEME.accent)
+    -- Verify & force position
+    task.wait(0.2)
+    local vpCheck=getViewport()
+    local mainAbsPos=main.AbsolutePosition; local mainAbsSize=main.AbsoluteSize
+    warn(string.format("[DDS] Panel check: pos=(%.0f,%.0f) size=(%.0f,%.0f)",
+        mainAbsPos.X, mainAbsPos.Y, mainAbsSize.X, mainAbsSize.Y))
+    if mainAbsSize.X<=0 or mainAbsSize.Y<=0 or mainAbsPos.X<-100 or mainAbsPos.Y<-100 then
+        warn("[DDS] Panel off-screen or zero, forcing reposition")
+        main.AnchorPoint=Vector2.new(0,0)
+        main.Position=UDim2.new(0,20,0,80)
+        main.Size=UDim2.new(0,320,0,math.min(480,vpCheck.Y-100))
+        shadow.AnchorPoint=Vector2.new(0,0)
+        shadow.Position=UDim2.new(0,16,0,76)
+        shadow.Size=UDim2.new(0,328,0,math.min(488,vpCheck.Y-96))
+    end
+    main.Visible=true; shadow.Visible=true
+
     track(fab.MouseButton1Click:Connect(function()
         main.Visible=not main.Visible; shadow.Visible=main.Visible
     end))
+
+    -- Diagnostic
+    task.spawn(function()
+        task.wait(1)
+        warn("[DDS] === DIAGNOSTIC ===")
+        warn("[DDS] ScreenGui parent: "..tostring(sg.Parent))
+        warn("[DDS] ScreenGui.Enabled: "..tostring(sg.Enabled))
+        warn("[DDS] ScreenGui children: "..tostring(#sg:GetChildren()))
+        warn("[DDS] Main visible: "..tostring(main.Visible))
+        warn("[DDS] Main AbsolutePosition: "..tostring(main.AbsolutePosition))
+        warn("[DDS] Main AbsoluteSize: "..tostring(main.AbsoluteSize))
+        warn("[DDS] FAB AbsolutePosition: "..tostring(fab.AbsolutePosition))
+        warn("[DDS] Viewport: "..tostring(getViewport()))
+        warn("[DDS] =================")
+    end)
 end
+
+task.spawn(function()
+    task.wait(3)
+    if not State.UI.Gui or not State.UI.Gui.Parent then
+        warn("[DDS] Retry: ScreenGui not parented after 3s, rebuild with PlayerGui")
+        GuiHost = LP:FindFirstChild("PlayerGui")
+        if GuiHost then buildUI() end
+    end
+    task.wait(1)
+    local mainPanel = State.UI.Gui and State.UI.Gui:FindFirstChild("DDS_MainPanel")
+    if mainPanel and (not mainPanel.Visible or mainPanel.AbsoluteSize.X <= 0) then
+        warn("[DDS] Main panel not visible after build — force reposition")
+        mainPanel.AnchorPoint=Vector2.new(0,0)
+        mainPanel.Position=UDim2.new(0,20,0,80)
+        mainPanel.Size=UDim2.new(0,320,0,400)
+        mainPanel.Visible=true
+    end
+end)
 
 buildUI()
 
@@ -1050,8 +1148,7 @@ task.spawn(function()
                 local actual=State.SpeedCurrentKmh or 0
                 State.UI.InfoLabel.Text=string.format(
                     "  %s · Target %.0f km/h · Aktual %.0f km/h · Gear:%d",
-                    State.IsBike and "MOTOR" or "MOBIL",
-                    target, actual, #State.GearValues)
+                    State.IsBike and "MOTOR" or "MOBIL", target, actual, #State.GearValues)
             else
                 State.UI.InfoLabel.Text="  Kategori: - (belum duduk)"
             end
