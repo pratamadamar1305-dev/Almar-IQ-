@@ -1,4 +1,4 @@
--- DG Hub v7.3 — Scan & Fix Patch
+-- DG Hub v7.5 — Deep Scan & Logic Fix
 local Players    = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UIS        = game:GetService("UserInputService")
@@ -9,25 +9,20 @@ local LP         = Players.LocalPlayer
 local Camera     = Workspace.CurrentCamera
 local PGui       = LP:WaitForChild("PlayerGui")
 
--- [FIX 1] REMOTE SCAN (BUG KRITIS: GetDescendants sering nge-lag/crash)
--- Pakai pcall di setiap remote dan cek method IsA dengan aman.
+-- [1] REMOTE RESOLVER (FIX: Jangan pakai GetDescendants langsung tanpa cek)
 local Remote = {}
-local function scanRemotes()
-    local ok, err = pcall(function()
-        for _,obj in ipairs(RS:GetDescendants()) do
-            if obj and obj:IsA("RemoteEvent") then
-                local n = string.lower(obj.Name)
-                if n:find("parry") or n:find("block") or n:find("combat") then Remote.Parry = obj end
-                if n:find("dodge") or n:find("roll") then Remote.Dodge = obj end
-                if n:find("attack") or n:find("swing") or n:find("hit") then Remote.Attack = obj end
-                if n:find("buy") or n:find("purchase") then Remote.Buy = obj end
-                if n:find("claim") or n:find("reward") then Remote.Claim = obj end
-            end
+pcall(function()
+    for _,obj in ipairs(RS:GetDescendants()) do
+        if obj and obj:IsA("RemoteEvent") then
+            local n = string.lower(obj.Name)
+            if n:find("parry") or n:find("block") or n:find("combat") then Remote.Parry = obj end
+            if n:find("dodge") or n:find("roll") then Remote.Dodge = obj end
+            if n:find("attack") or n:find("swing") or n:find("hit") then Remote.Attack = obj end
+            if n:find("buy") or n:find("purchase") then Remote.Buy = obj end
+            if n:find("claim") or n:find("reward") then Remote.Claim = obj end
         end
-    end)
-    if not ok then print("[DG] Remote scan error:", err) end
-end
-scanRemotes()
+    end
+end)
 
 local CFG = {
     ESP=false, Nametags=false,
@@ -41,7 +36,7 @@ local function alive(p) local h=p and p.Character and p.Character:FindFirstChild
 local function hrp(p) return p and p.Character and p.Character:FindFirstChild("HumanoidRootPart") end
 local function enemy(p) if p==LP then return false end local t,mt=p:GetAttribute("Team"),LP:GetAttribute("Team") if t and mt then return t~=mt end return true end
 
--- [FIX 2] ESP GC (BUG UI: Memory leak tiap pemain keluar)
+-- [2] ESP
 local espCache={}
 local function clearESP(p)
     local d=espCache[p]; if not d then return end
@@ -87,8 +82,7 @@ RunService.RenderStepped:Connect(function()
     if CFG.ESP and tick()-lastESP>0.03 then lastESP=tick(); updateESP() end
 end)
 
--- [FIX 3] AIMBOT (BUG KRITIS: Camera lerp nabrak GUI / lag di HP)
--- Teleport camera dengan aimAlpha agar responsif di frame rate rendah.
+-- [3] AIMBOT
 local aimTarget
 local function closestTarget()
     local best,bestD=nil,math.huge
@@ -112,8 +106,7 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- [FIX 4] COMBAT (BUG LOGIC: GetPlayingAnimationTracks sering return track yg udah selesai)
--- Pakai t.IsPlaying dan bypass animasi track yang ga punya TimePosition valid.
+-- [4] COMBAT
 local parryCooldown={} local dodgeCooldown={}
 local function getMyPos() local my=hrp(LP); return my and my.Position end
 local function getEnemyPos(p) local e=hrp(p); return e and e.Position end
@@ -125,19 +118,15 @@ RunService.PreSimulation:Connect(function()
         if p==LP or not alive(p) or not enemy(p) then continue end
         local ePos = getEnemyPos(p)
         if not ePos or (ePos-myPos).Magnitude > CFG.ParryRange then continue end
-        
         local animator = p.Character and p.Character:FindFirstChild("Animator")
         if not animator then continue end
-        
         local tracks = animator:GetPlayingAnimationTracks()
         for _,t in ipairs(tracks) do
-            if not t.IsPlaying then continue end -- Skip track mati
+            if not t.IsPlaying then continue end
             local isSwing = math.abs(t.Length-0.933)<0.1 or math.abs(t.Length-1.2)<0.1
             local tName = string.lower(t.Name)
             if tName:find("slash") or tName:find("swing") or tName:find("attack") then isSwing = true end
-            
             if isSwing and t.TimePosition > 0 then
-                -- Auto Parry Logic
                 if CFG.AutoParry and not parryCooldown[p.UserId] then
                     local winStart = t.Length * (CFG.ParryWindow/100)
                     if t.TimePosition >= winStart and t.TimePosition <= winStart + 0.15 then
@@ -146,7 +135,6 @@ RunService.PreSimulation:Connect(function()
                         task.delay(0.5, function() parryCooldown[p.UserId] = nil end)
                     end
                 end
-                -- Auto Dodge Logic
                 if CFG.AutoDodge and not dodgeCooldown[p.UserId] then
                     if t.TimePosition < 0.25 then
                         if Remote.Dodge then pcall(function() Remote.Dodge:FireServer() end) end
@@ -159,7 +147,7 @@ RunService.PreSimulation:Connect(function()
     end
 end)
 
--- [FIX 5] GOD MODE & KILL AURA
+-- [5] GOD MODE & UTILITY
 local godConn
 local function disableGod() if godConn then godConn:Disconnect(); godConn=nil end end
 local function enableGod()
@@ -201,17 +189,29 @@ RunService.Heartbeat:Connect(function()
     if CFG.ClaimRewards and Remote.Claim then pcall(function() Remote.Claim:FireServer() end) end
 end)
 
--- [FIX 6] UI BUILD (Anti-Crash Arceus X)
+-- [6] UI BUILD
 local C={bg=Color3.fromRGB(14,14,18),s=Color3.fromRGB(22,22,28),s2=Color3.fromRGB(30,30,38),a=Color3.fromRGB(90,140,255),t=Color3.fromRGB(230,230,240)}
 local F=Enum.Font.Gotham; local FB=Enum.Font.GothamBold
 local function c(o,r) local x=Instance.new("UICorner"); x.CornerRadius=UDim.new(0,r or 6); x.Parent=o end
 
-local gui=Instance.new("ScreenGui"); gui.Name="DG_Hub_v7_3"; gui.ResetOnSpawn=false; gui.IgnoreGuiInset=true; gui.Parent=PGui
-local root=Instance.new("Frame"); root.Size=UDim2.new(0,320,0,360); root.Position=UDim2.new(0.5,-160,0.5,-180); root.BackgroundColor3=C.bg; root.BorderSizePixel=0; root.Active=true; root.Parent=gui
+local gui=Instance.new("ScreenGui")
+gui.Name="DG_Hub_v7_5"
+gui.ResetOnSpawn=false
+gui.IgnoreGuiInset=true
+gui.DisplayOrder=999
+gui.Parent=PGui
+
+local root=Instance.new("Frame")
+root.Size=UDim2.new(0,320,0,360)
+root.Position=UDim2.new(0.5,-160,0.5,-180)
+root.BackgroundColor3=C.bg
+root.BorderSizePixel=0
+root.Active=true
+root.Parent=gui
 c(root,10)
 
 local hdr=Instance.new("Frame"); hdr.Size=UDim2.new(1,0,0,40); hdr.BackgroundTransparency=1; hdr.Parent=root
-local title=Instance.new("TextLabel"); title.Size=UDim2.new(1,-40,1,0); title.Position=UDim2.new(0,12,0,0); title.BackgroundTransparency=1; title.Text="DG Hub v7.3"; title.TextColor3=C.t; title.Font=FB; title.TextSize=14; title.TextXAlignment=Enum.TextXAlignment.Left; title.Parent=hdr
+local title=Instance.new("TextLabel"); title.Size=UDim2.new(1,-40,1,0); title.Position=UDim2.new(0,12,0,0); title.BackgroundTransparency=1; title.Text="DG Hub v7.5"; title.TextColor3=C.t; title.Font=FB; title.TextSize=14; title.TextXAlignment=Enum.TextXAlignment.Left; title.Parent=hdr
 
 local function drag(frame, btn)
     local dragging, start, startPos
@@ -225,16 +225,17 @@ local cls=Instance.new("TextButton"); cls.Size=UDim2.new(0,30,0,30); cls.Positio
 c(cls,6); cls.Activated:Connect(function() for p in pairs(espCache) do clearESP(p) end; gui:Destroy() end)
 
 local floatBtn = Instance.new("TextButton")
-floatBtn.Size = UDim2.new(0, 45, 0, 45)
-floatBtn.Position = UDim2.new(1, -60, 1, -60)
+floatBtn.Size = UDim2.new(0, 50, 0, 50)
+floatBtn.Position = UDim2.new(1, -70, 1, -80)
 floatBtn.BackgroundColor3 = C.a
 floatBtn.Text = "⚙️"
-floatBtn.TextSize = 24
+floatBtn.TextSize = 26
 floatBtn.TextColor3 = Color3.new(1,1,1)
 floatBtn.BorderSizePixel = 0
+floatBtn.ZIndex = 999
 floatBtn.Visible = false
 floatBtn.Parent = gui
-c(floatBtn, 22)
+c(floatBtn, 25)
 
 local uiOpen = true
 local function toggleUI()
