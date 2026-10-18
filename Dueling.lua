@@ -1,15 +1,20 @@
--- DG Hub v7.5 — Deep Scan & Logic Fix
+-- DG Hub v8.2 — Absolute Mobile Fix (Arceus X / Delta Optimized)
+-- 1. UI Toggle terpisah (Anti-Notch/Block)
+-- 2. Combat input fallback (VIM)
+-- 3. Memory Leak Fix (Drawings & Strings)
+
 local Players    = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UIS        = game:GetService("UserInputService")
 local Workspace  = game:GetService("Workspace")
 local RS         = game:GetService("ReplicatedStorage")
 local Tween      = game:GetService("TweenService")
+local VIM        = game:GetService("VirtualInputManager")
 local LP         = Players.LocalPlayer
 local Camera     = Workspace.CurrentCamera
 local PGui       = LP:WaitForChild("PlayerGui")
 
--- [1] REMOTE RESOLVER (FIX: Jangan pakai GetDescendants langsung tanpa cek)
+-- [1] REMOTE RESOLVER
 local Remote = {}
 pcall(function()
     for _,obj in ipairs(RS:GetDescendants()) do
@@ -27,7 +32,7 @@ end)
 local CFG = {
     ESP=false, Nametags=false,
     Aimbot=false, AimbotFOV=120, AimbotSmooth=22,
-    AutoParry=false, ParryRange=30, ParryWindow=15,
+    AutoParry=false, ParryRange=30, ParryChance=100,
     AutoDodge=false, GodMode=false, KillAura=false, KillAuraRange=14,
     AntiPosture=false, AutoBuy=false, ClaimRewards=false,
 }
@@ -36,22 +41,21 @@ local function alive(p) local h=p and p.Character and p.Character:FindFirstChild
 local function hrp(p) return p and p.Character and p.Character:FindFirstChild("HumanoidRootPart") end
 local function enemy(p) if p==LP then return false end local t,mt=p:GetAttribute("Team"),LP:GetAttribute("Team") if t and mt then return t~=mt end return true end
 
--- [2] ESP
+-- [2] ESP (Garbage Collection & Throttle)
 local espCache={}
 local function clearESP(p)
     local d=espCache[p]; if not d then return end
-    for k,obj in pairs(d) do if typeof(obj)=="userdata" then pcall(function() obj:Remove() end) end end
+    for _,obj in pairs(d) do pcall(function() obj:Remove() end) end
     espCache[p]=nil
 end
 Players.PlayerRemoving:Connect(clearESP)
 
 local function updateESP()
-    if not CFG.ESP then return end
     for _,p in ipairs(Players:GetPlayers()) do
         if p==LP then continue end
         local r=hrp(p); local head=p.Character and p.Character:FindFirstChild("Head")
         local hum=p.Character and p.Character:FindFirstChildOfClass("Humanoid")
-        if r and head and hum and hum.Health>0 and enemy(p) then
+        if CFG.ESP and r and head and hum and hum.Health>0 and enemy(p) then
             local hpos,on1=Camera:WorldToViewportPoint(head.Position+Vector3.new(0,0.5,0))
             local rpos,on2=Camera:WorldToViewportPoint(r.Position)
             if on1 and on2 then
@@ -106,7 +110,7 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- [4] COMBAT
+-- [4] COMBAT (VIM Fallback)
 local parryCooldown={} local dodgeCooldown={}
 local function getMyPos() local my=hrp(LP); return my and my.Position end
 local function getEnemyPos(p) local e=hrp(p); return e and e.Position end
@@ -126,18 +130,41 @@ RunService.PreSimulation:Connect(function()
             local isSwing = math.abs(t.Length-0.933)<0.1 or math.abs(t.Length-1.2)<0.1
             local tName = string.lower(t.Name)
             if tName:find("slash") or tName:find("swing") or tName:find("attack") then isSwing = true end
+            
             if isSwing and t.TimePosition > 0 then
+                -- Auto Parry (Chance System + VIM Fallback)
                 if CFG.AutoParry and not parryCooldown[p.UserId] then
-                    local winStart = t.Length * (CFG.ParryWindow/100)
-                    if t.TimePosition >= winStart and t.TimePosition <= winStart + 0.15 then
-                        if Remote.Parry then pcall(function() Remote.Parry:FireServer() end) end
+                    if t.TimePosition > 0.1 and t.TimePosition < 0.3 then
+                        local roll = math.random(1, 100)
+                        if roll <= CFG.ParryChance then
+                            if Remote.Parry then 
+                                pcall(function() Remote.Parry:FireServer() end) 
+                            else
+                                -- VIM Fallback (Press Z / E)
+                                pcall(function()
+                                    VIM:SendKeyEvent(true, Enum.KeyCode.Z, false, game)
+                                    task.wait(0.05)
+                                    VIM:SendKeyEvent(false, Enum.KeyCode.Z, false, game)
+                                end)
+                            end
+                        end
                         parryCooldown[p.UserId] = true
-                        task.delay(0.5, function() parryCooldown[p.UserId] = nil end)
+                        task.delay(0.6, function() parryCooldown[p.UserId] = nil end)
                     end
                 end
+                
+                -- Auto Dodge
                 if CFG.AutoDodge and not dodgeCooldown[p.UserId] then
                     if t.TimePosition < 0.25 then
-                        if Remote.Dodge then pcall(function() Remote.Dodge:FireServer() end) end
+                        if Remote.Dodge then 
+                            pcall(function() Remote.Dodge:FireServer() end) 
+                        else
+                            pcall(function()
+                                VIM:SendKeyEvent(true, Enum.KeyCode.LeftShift, false, game)
+                                task.wait(0.05)
+                                VIM:SendKeyEvent(false, Enum.KeyCode.LeftShift, false, game)
+                            end)
+                        end
                         dodgeCooldown[p.UserId] = true
                         task.delay(0.6, function() dodgeCooldown[p.UserId] = nil end)
                     end
@@ -167,7 +194,14 @@ RunService.Heartbeat:Connect(function()
                 if p~=LP and alive(p) and enemy(p) then
                     local ePos = getEnemyPos(p)
                     if ePos and (ePos-myPos).Magnitude <= CFG.KillAuraRange then
-                        if Remote.Attack then pcall(function() Remote.Attack:FireServer(p) end) end
+                        if Remote.Attack then 
+                            pcall(function() Remote.Attack:FireServer(p) end) 
+                        else
+                            pcall(function()
+                                VIM:SendMouseButtonEvent(0,0,0,true,game,0)
+                                VIM:SendMouseButtonEvent(0,0,0,false,game,0)
+                            end)
+                        end
                         lastAura=tick(); break
                     end
                 end
@@ -189,17 +223,18 @@ RunService.Heartbeat:Connect(function()
     if CFG.ClaimRewards and Remote.Claim then pcall(function() Remote.Claim:FireServer() end) end
 end)
 
--- [6] UI BUILD
+-- [6] UI BUILD (MAIN UI & TOGGLE UI DIPISAH)
 local C={bg=Color3.fromRGB(14,14,18),s=Color3.fromRGB(22,22,28),s2=Color3.fromRGB(30,30,38),a=Color3.fromRGB(90,140,255),t=Color3.fromRGB(230,230,240)}
 local F=Enum.Font.Gotham; local FB=Enum.Font.GothamBold
 local function c(o,r) local x=Instance.new("UICorner"); x.CornerRadius=UDim.new(0,r or 6); x.Parent=o end
 
-local gui=Instance.new("ScreenGui")
-gui.Name="DG_Hub_v7_5"
-gui.ResetOnSpawn=false
-gui.IgnoreGuiInset=true
-gui.DisplayOrder=999
-gui.Parent=PGui
+-- GUI MAIN
+local guiMain=Instance.new("ScreenGui")
+guiMain.Name="DG_Hub_v8_2_Main"
+guiMain.ResetOnSpawn=false
+guiMain.IgnoreGuiInset=true
+guiMain.DisplayOrder=999
+guiMain.Parent=PGui
 
 local root=Instance.new("Frame")
 root.Size=UDim2.new(0,320,0,360)
@@ -207,11 +242,11 @@ root.Position=UDim2.new(0.5,-160,0.5,-180)
 root.BackgroundColor3=C.bg
 root.BorderSizePixel=0
 root.Active=true
-root.Parent=gui
+root.Parent=guiMain
 c(root,10)
 
 local hdr=Instance.new("Frame"); hdr.Size=UDim2.new(1,0,0,40); hdr.BackgroundTransparency=1; hdr.Parent=root
-local title=Instance.new("TextLabel"); title.Size=UDim2.new(1,-40,1,0); title.Position=UDim2.new(0,12,0,0); title.BackgroundTransparency=1; title.Text="DG Hub v7.5"; title.TextColor3=C.t; title.Font=FB; title.TextSize=14; title.TextXAlignment=Enum.TextXAlignment.Left; title.Parent=hdr
+local title=Instance.new("TextLabel"); title.Size=UDim2.new(1,-40,1,0); title.Position=UDim2.new(0,12,0,0); title.BackgroundTransparency=1; title.Text="DG Hub v8.2"; title.TextColor3=C.t; title.Font=FB; title.TextSize=14; title.TextXAlignment=Enum.TextXAlignment.Left; title.Parent=hdr
 
 local function drag(frame, btn)
     local dragging, start, startPos
@@ -221,21 +256,26 @@ local function drag(frame, btn)
 end
 drag(root, title)
 
-local cls=Instance.new("TextButton"); cls.Size=UDim2.new(0,30,0,30); cls.Position=UDim2.new(1,-40,0,5); cls.BackgroundColor3=C.s2; cls.Text="×"; cls.TextColor3=C.t; cls.Font=FB; cls.TextSize=18; cls.Parent=hdr
-c(cls,6); cls.Activated:Connect(function() for p in pairs(espCache) do clearESP(p) end; gui:Destroy() end)
+-- GUI TOGGLE (ScreenInsets None = Anti-Ngeblok)
+local guiToggle=Instance.new("ScreenGui")
+guiToggle.Name="DG_Hub_v8_2_Toggle"
+guiToggle.ResetOnSpawn=false
+guiToggle.IgnoreGuiInset=true
+guiToggle.ScreenInsets=Enum.ScreenInsets.None
+guiToggle.DisplayOrder=2147483647
+guiToggle.Parent=PGui
 
 local floatBtn = Instance.new("TextButton")
-floatBtn.Size = UDim2.new(0, 50, 0, 50)
-floatBtn.Position = UDim2.new(1, -70, 1, -80)
+floatBtn.Size = UDim2.new(0, 55, 0, 55)
+floatBtn.Position = UDim2.new(0.5, -27, 1, -100)
 floatBtn.BackgroundColor3 = C.a
 floatBtn.Text = "⚙️"
-floatBtn.TextSize = 26
+floatBtn.TextSize = 28
 floatBtn.TextColor3 = Color3.new(1,1,1)
 floatBtn.BorderSizePixel = 0
-floatBtn.ZIndex = 999
 floatBtn.Visible = false
-floatBtn.Parent = gui
-c(floatBtn, 25)
+floatBtn.Parent = guiToggle
+c(floatBtn, 27)
 
 local uiOpen = true
 local function toggleUI()
@@ -248,6 +288,14 @@ floatBtn.Activated:Connect(toggleUI)
 UIS.InputBegan:Connect(function(input, gpe)
     if gpe then return end
     if input.KeyCode == Enum.KeyCode.RightShift then toggleUI() end
+end)
+
+local cls=Instance.new("TextButton"); cls.Size=UDim2.new(0,30,0,30); cls.Position=UDim2.new(1,-40,0,5); cls.BackgroundColor3=C.s2; cls.Text="×"; cls.TextColor3=C.t; cls.Font=FB; cls.TextSize=18; cls.Parent=hdr
+c(cls,6)
+cls.Activated:Connect(function() 
+    for p in pairs(espCache) do clearESP(p) end
+    guiMain:Destroy()
+    guiToggle:Destroy()
 end)
 
 local nav=Instance.new("Frame"); nav.Size=UDim2.new(1,-20,0,30); nav.Position=UDim2.new(0,10,0,45); nav.BackgroundColor3=C.s; nav.Parent=root
@@ -282,13 +330,13 @@ end
 local function addSlider(parent,label,key,min,max,step)
     local b=Instance.new("Frame"); b.Size=UDim2.new(1,0,0,50); b.BackgroundColor3=C.s; b.Parent=parent; c(b,6)
     local tl=Instance.new("TextLabel"); tl.Size=UDim2.new(1,-50,0,15); tl.Position=UDim2.new(0,10,0,5); tl.BackgroundTransparency=1; tl.Text=label; tl.TextColor3=C.t; tl.Font=F; tl.TextSize=12; tl.TextXAlignment=Enum.TextXAlignment.Left; tl.Parent=b
-    local vl=Instance.new("TextLabel"); vl.Size=UDim2.new(0,34,0,15); vl.Position=UDim2.new(1,-44,0,5); vl.BackgroundColor3=C.s2; vl.Text=tostring(CFG[key]); vl.TextColor3=C.a; vl.Font=FB; vl.TextSize=11; vl.Parent=b; c(vl,4)
+    local vl=Instance.new("TextLabel"); vl.Size=UDim2.new(0,34,0,15); vl.Position=UDim2.new(1,-44,0,5); vl.BackgroundColor3=C.s2; vl.Text=tostring(CFG[key])..(key=="ParryChance" and "%" or ""); vl.TextColor3=C.a; vl.Font=FB; vl.TextSize=11; vl.Parent=b; c(vl,4)
     local tb=Instance.new("Frame"); tb.Size=UDim2.new(1,-20,0,8); tb.Position=UDim2.new(0,10,0,32); tb.BackgroundColor3=C.s2; tb.Parent=b; c(tb,4)
     local fl=Instance.new("Frame"); fl.Size=UDim2.new((CFG[key]-min)/(max-min),0,1,0); fl.BackgroundColor3=C.a; fl.Parent=tb; c(fl,4)
     local kb=Instance.new("Frame"); kb.Size=UDim2.new(0,18,0,18); kb.Position=UDim2.new((CFG[key]-min)/(max-min),-9,0.5,-9); kb.BackgroundColor3=Color3.new(1,1,1); kb.Parent=tb; c(kb,9)
     local hit=Instance.new("TextButton"); hit.Size=UDim2.new(1,0,0,36); hit.Position=UDim2.new(0,0,0,22); hit.BackgroundTransparency=1; hit.Text=""; hit.ZIndex=5; hit.Parent=b
     local drag=false
-    local function upd(x) local r=math.clamp((x-tb.AbsolutePosition.X)/tb.AbsoluteSize.X,0,1); local v=min+math.floor((r*(max-min))/step+0.5)*step; CFG[key]=v; vl.Text=tostring(v); fl.Size=UDim2.new(r,0,1,0); kb.Position=UDim2.new(r,-9,0.5,-9) end
+    local function upd(x) local r=math.clamp((x-tb.AbsolutePosition.X)/tb.AbsoluteSize.X,0,1); local v=min+math.floor((r*(max-min))/step+0.5)*step; CFG[key]=v; vl.Text=tostring(v)..(key=="ParryChance" and "%" or ""); fl.Size=UDim2.new(r,0,1,0); kb.Position=UDim2.new(r,-9,0.5,-9) end
     hit.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.Touch or i.UserInputType==Enum.UserInputType.MouseButton1 then drag=true; upd(i.Position.X) end end)
     UIS.InputChanged:Connect(function(i) if drag and (i.UserInputType==Enum.UserInputType.Touch or i.UserInputType==Enum.UserInputType.MouseMovement) then upd(i.Position.X) end end)
     UIS.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.Touch or i.UserInputType==Enum.UserInputType.MouseButton1 then drag=false end end)
@@ -299,7 +347,7 @@ local function addBtn(parent,label,cb)
 end
 
 addToggle(pages["Combat"],"Aimbot","Aimbot"); addSlider(pages["Combat"],"Aimbot FOV","AimbotFOV",20,300,5); addSlider(pages["Combat"],"Aimbot Smooth","AimbotSmooth",1,100,1)
-addToggle(pages["Combat"],"Auto-Parry","AutoParry"); addSlider(pages["Combat"],"Parry Range","ParryRange",5,50,1); addSlider(pages["Combat"],"Parry Window","ParryWindow",10,60,1)
+addToggle(pages["Combat"],"Auto-Parry","AutoParry"); addSlider(pages["Combat"],"Parry Range","ParryRange",5,50,1); addSlider(pages["Combat"],"Parry Chance","ParryChance",1,100,1)
 addToggle(pages["Combat"],"Auto-Dodge","AutoDodge"); addToggle(pages["Combat"],"Kill Aura","KillAura"); addSlider(pages["Combat"],"Kill Aura Range","KillAuraRange",5,40,1)
 addToggle(pages["Combat"],"God Mode","GodMode",function(on) if on then enableGod() else disableGod() end end)
 addToggle(pages["Visuals"],"ESP Box","ESP"); addToggle(pages["Visuals"],"Nametags","Nametags"); addToggle(pages["Visuals"],"Anti Posture","AntiPosture")
