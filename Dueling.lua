@@ -1,9 +1,8 @@
--- DG Hub v38 — UI Fix & Auto Parry
+-- DG Hub v40 — Pure Background Parry (No UI)
 local Players    = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local RS         = game:GetService("ReplicatedStorage")
 local LP         = Players.LocalPlayer
-local PGui       = LP:WaitForChild("PlayerGui")
 
 -- [1] AMBIL REMOTE
 local Remotes = RS:WaitForChild("Remotes")
@@ -11,20 +10,25 @@ local PCRequest = Remotes:WaitForChild("PlayerCharacter"):WaitForChild("Request"
 local StartBlock = PCRequest:WaitForChild("StartBlock")
 local ReleaseBlock = PCRequest:WaitForChild("ReleaseBlock")
 
-local CFG = { AutoParry = false } -- Default mati biar aman
-
+-- [2] FUNGSI PARRY (Nembak pakai Parameter)
 local function fireParry()
     pcall(function()
+        local myHRP = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+        local myCFrame = myHRP and myHRP.CFrame or CFrame.new()
+        
+        -- 1. Tahan Block (StartBlock)
         StartBlock:FireServer()
-        task.wait(0.05) 
-        ReleaseBlock:FireServer()
+        
+        -- 2. Lepas Block (ReleaseBlock) setelah 0.06 detik
+        -- Kita kasih parameter CFrame & tick() buat jaga-jaga kalau server minta
+        task.wait(0.06) 
+        ReleaseBlock:FireServer(myCFrame, tick())
     end)
 end
 
--- [2] COMBAT ENGINE
+-- [3] COMBAT ENGINE
 local parryCooldown={}
 RunService.PreSimulation:Connect(function()
-    if not CFG.AutoParry then return end
     local myChar = LP.Character
     local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
     if not myHRP then return end
@@ -42,13 +46,16 @@ RunService.PreSimulation:Connect(function()
         
         for _,t in ipairs(animator:GetPlayingAnimationTracks()) do
             if not t.IsPlaying then continue end
+            
             local targetTime = nil
+            -- Timing (0.933s = 0.15 | 1.2s = 0.42)
             if math.abs(t.Length - 0.933) < 0.05 then targetTime = 0.15
             elseif math.abs(t.Length - 1.2) < 0.05 then targetTime = 0.42 end
             
             if targetTime and t.TimePosition > 0 then
-                if CFG.AutoParry and not parryCooldown[p.UserId] then
+                if not parryCooldown[p.UserId] then
                     if t.TimePosition >= targetTime and t.TimePosition <= targetTime + 0.05 then
+                        -- LANGSUNG EKSEKUSI TANPA CEK UI
                         fireParry() 
                         parryCooldown[p.UserId] = true
                         task.delay(0.6, function() parryCooldown[p.UserId] = nil end)
@@ -59,38 +66,4 @@ RunService.PreSimulation:Connect(function()
     end
 end)
 
--- [3] UI SUPER SEDERHANA (PASTI MUNCUL)
-local gui = Instance.new("ScreenGui")
-gui.Name = "DG_UI"
-gui.ResetOnSpawn = false
-gui.DisplayOrder = 999
-gui.Parent = PGui
-
-local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 150, 0, 50)
-frame.Position = UDim2.new(0, 20, 0, 100) -- Kiri atas biar ga ketutup
-frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0) -- Hitam
-frame.BorderSizePixel = 0
-frame.Parent = gui
-
-local btn = Instance.new("TextButton")
-btn.Size = UDim2.new(1, 0, 1, 0)
-btn.BackgroundColor3 = Color3.fromRGB(200, 0, 0) -- Merah (OFF)
-btn.Text = "PARRY: OFF"
-btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-btn.Font = Enum.Font.SourceSansBold
-btn.TextSize = 18
-btn.Parent = frame
-
-btn.MouseButton1Click:Connect(function()
-    CFG.AutoParry = not CFG.AutoParry
-    if CFG.AutoParry then
-        btn.Text = "PARRY: ON"
-        btn.BackgroundColor3 = Color3.fromRGB(0, 200, 0) -- Hijau (ON)
-    else
-        btn.Text = "PARRY: OFF"
-        btn.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
-    end
-end)
-
-print("[DG] UI v38 berhasil dimuat. Cari tombol PARRY di kiri atas layar.")
+print("[DG] Auto-Parry Background Aktif! Silakan masuk duel.")
