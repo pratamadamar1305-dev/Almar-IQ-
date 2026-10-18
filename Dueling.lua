@@ -1,24 +1,17 @@
--- DG Hub v34 — Fixed UI & Remote Test
+-- DG Hub v36 — UI Full Kontras
 local Players    = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UIS        = game:GetService("UserInputService")
 local RS         = game:GetService("ReplicatedStorage")
-local Tween      = game:GetService("TweenService")
 local LP         = Players.LocalPlayer
 
--- [1] AMBIL REMOTE ASLI
 local Remotes = RS:WaitForChild("Remotes")
 local PCRequest = Remotes:WaitForChild("PlayerCharacter"):WaitForChild("Request")
-
 local StartBlock = PCRequest:WaitForChild("StartBlock")
 local ReleaseBlock = PCRequest:WaitForChild("ReleaseBlock")
 
-local CFG = {
-    AutoParry = false,
-    ParryChance = 100,
-}
+local CFG = { AutoParry = false }
 
--- [2] FUNGSI PARRY
 local function fireParry()
     pcall(function()
         StartBlock:FireServer()
@@ -27,7 +20,7 @@ local function fireParry()
     end)
 end
 
--- [3] COMBAT ENGINE
+-- COMBAT ENGINE
 local parryCooldown={}
 RunService.PreSimulation:Connect(function()
     if not CFG.AutoParry then return end
@@ -56,9 +49,7 @@ RunService.PreSimulation:Connect(function()
             if targetTime and t.TimePosition > 0 then
                 if CFG.AutoParry and not parryCooldown[p.UserId] then
                     if t.TimePosition >= targetTime and t.TimePosition <= targetTime + 0.05 then
-                        if math.random(1, 100) <= CFG.ParryChance then
-                            fireParry() 
-                        end
+                        fireParry() 
                         parryCooldown[p.UserId] = true
                         task.delay(0.6, function() parryCooldown[p.UserId] = nil end)
                     end
@@ -68,72 +59,62 @@ RunService.PreSimulation:Connect(function()
     end
 end)
 
--- [4] UI SIMPLE (ANTI GAGAL)
-local C={bg=Color3.fromRGB(14,14,18),s=Color3.fromRGB(22,22,28),s2=Color3.fromRGB(30,30,38),a=Color3.fromRGB(90,140,255),t=Color3.fromRGB(230,230,240)}
-local F=Enum.Font.GothamBold
-local function c(o,r) local x=Instance.new("UICorner"); x.CornerRadius=UDim.new(0,r or 6); x.Parent=o end
+-- UI PRIMITIF (ANTI GAGAL)
+local gui = Instance.new("ScreenGui")
+gui.Name = "DG_UI_Simple"
+gui.ResetOnSpawn = false
+gui.Parent = LP:WaitForChild("PlayerGui")
 
-local guiMain=Instance.new("ScreenGui"); guiMain.Name="DG_Main_v34"; guiMain.ResetOnSpawn=false; guiMain.DisplayOrder=999; guiMain.Parent=LP:WaitForChild("PlayerGui")
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 200, 0, 100)
+frame.Position = UDim2.new(0.5, -100, 0.2, 0) -- Di tengah atas
+frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0) -- Hitam pekat
+frame.BorderSizePixel = 2
+frame.BorderColor3 = Color3.fromRGB(255, 255, 255)
+frame.Parent = gui
 
--- Frame utama dengan ukuran fix
-local root=Instance.new("Frame")
-root.Size=UDim2.new(0,260,0,200)
-root.Position=UDim2.new(0.5,-130,0.3,0) -- Posisi agak ke atas biar ga ketutup
-root.BackgroundColor3=C.bg
-root.BorderSizePixel=0
-root.Parent=guiMain
-c(root,10)
+-- Pake TextBox biar pasti muncul teksnya
+local toggleBtn = Instance.new("TextBox")
+toggleBtn.Size = UDim2.new(1, -20, 0, 40)
+toggleBtn.Position = UDim2.new(0, 10, 0, 10)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(200, 0, 0) -- Merah = OFF
+toggleBtn.Text = "PARRY: OFF"
+toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleBtn.Font = Enum.Font.GothamBold
+toggleBtn.TextSize = 16
+toggleBtn.TextEditable = false -- Biar ga bisa diketik
+toggleBtn.Parent = frame
 
-local title=Instance.new("TextLabel")
-title.Size=UDim2.new(1,0,0,40)
-title.BackgroundColor3=C.s
-title.Text="DG Hub v34 (Test Remote)"
-title.TextColor3=C.t
-title.Font=F
-title.TextSize=14
-title.Parent=root
-c(title,6)
+local testBtn = Instance.new("TextBox")
+testBtn.Size = UDim2.new(1, -20, 0, 30)
+testBtn.Position = UDim2.new(0, 10, 0, 55)
+testBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+testBtn.Text = "TES MANUAL"
+testBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+testBtn.Font = Enum.Font.GothamBold
+testBtn.TextSize = 14
+testBtn.TextEditable = false
+testBtn.Parent = frame
 
--- TOMBOL TEST MANUAL
-local btnTest = Instance.new("TextButton")
-btnTest.Size=UDim2.new(1,-20,0,40)
-btnTest.Position=UDim2.new(0,10,0,50)
-btnTest.BackgroundColor3=Color3.fromRGB(200, 100, 0) -- Warna Oranye
-btnTest.Text="1. TES PARRY MANUAL (KLIK INI)"
-btnTest.TextColor3=C.t
-btnTest.Font=F
-btnTest.TextSize=12
-btnTest.Parent=root
-c(btnTest,6)
-btnTest.MouseButton1Click:Connect(function() fireParry() end)
-
--- TOGGLE AUTO
-local tgl = Instance.new("TextButton")
-tgl.Size=UDim2.new(1,-20,0,40)
-tgl.Position=UDim2.new(0,10,0,100)
-tgl.BackgroundColor3=C.s
-tgl.Text="Auto-Parry [OFF]"
-tgl.TextColor3=C.t
-tgl.Font=F
-tgl.TextSize=14
-tgl.Parent=root
-c(tgl,6)
-
-tgl.MouseButton1Click:Connect(function() 
-    CFG.AutoParry = not CFG.AutoParry
-    tgl.Text = "Auto-Parry ["..(CFG.AutoParry and "ON" or "OFF").."]"
-    tgl.BackgroundColor3 = CFG.AutoParry and C.a or C.s
+-- LOGIKA KLIK (Pake InputBegan biar respon di HP)
+toggleBtn.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+        CFG.AutoParry = not CFG.AutoParry
+        if CFG.AutoParry then
+            toggleBtn.Text = "PARRY: ON"
+            toggleBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 0) -- Hijau = ON
+        else
+            toggleBtn.Text = "PARRY: OFF"
+            toggleBtn.BackgroundColor3 = Color3.fromRGB(200, 0, 0) -- Merah = OFF
+        end
+    end
 end)
 
--- TOMBOL CLOSE
-local cls=Instance.new("TextButton")
-cls.Size=UDim2.new(1,-20,0,30)
-cls.Position=UDim2.new(0,10,0,150)
-cls.BackgroundColor3=C.s2
-cls.Text="TUTUP MENU"
-cls.TextColor3=C.t
-cls.Font=F
-cls.TextSize=12
-cls.Parent=root
-c(cls,6)
-cls.MouseButton1Click:Connect(function() guiMain:Destroy() end)
+testBtn.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+        testBtn.Text = "MUKUL!"
+        fireParry()
+        task.wait(0.5)
+        testBtn.Text = "TES MANUAL"
+    end
+end)
