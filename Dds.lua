@@ -1,7 +1,5 @@
--- Drag Drive Simulator — All-in-One Mobile v1.0 (ULTIMATE FIX)
--- Target game: Beta V1.1.9
--- Executor: Arceus X, Delta, Fluxus, Codex, Hydrogen
--- Double Checked: Fixed AutoUpgrade typo, Loop GC Leak, and UI Off-screen safety.
+-- Drag Drive Simulator — All-in-One Mobile v1.0 (UI FIX)
+-- Fokus patch: Memastikan panel utama selalu muncul di atas logo petir.
 
 local Players           = game:GetService("Players")
 local RunService        = game:GetService("RunService")
@@ -426,15 +424,9 @@ local function teleportAndInteract(targetPos)
 end
 
 local function farmLoop()
-    -- FIX: guard running agar tidak spawn loop ganda
     if FarmCache.Running then return end
     FarmCache.Running = true
-    
-    -- Gunakan environment lokal, bukan global Config, untuk mencegah error saat unload
-    while true do
-        if not (Config.AutoCourier or Config.AutoBarista or Config.AutoOffice or Config.FarmQueueMode) then
-            break
-        end
+    while Config.AutoCourier or Config.AutoBarista or Config.AutoOffice or Config.FarmQueueMode do
         local now = os.clock()
         if (now - FarmCache.LastScan) >= FarmCache.ScanCooldown then
             FarmCache.LastScan = now
@@ -502,7 +494,6 @@ track(RunService.Heartbeat:Connect(function()
     local candidates={}
     for _,g in ipairs(PlayerGui:GetDescendants()) do
         if g:IsA("GuiButton") and g.Visible and g.Active then
-            -- FIX: g.Text diganti jadi pcall agar tidak crash saat TextLabel ganti tipe
             local textStr = ""
             pcall(function() textStr = g.Text end)
             local n=(g.Name.." "..textStr):lower()
