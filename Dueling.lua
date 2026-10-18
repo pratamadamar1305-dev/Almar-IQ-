@@ -1,4 +1,4 @@
--- DG Hub v26 — Universal Parry Scanner (Lobby & Arena)
+-- DG Hub v28 — Real Parry Button Injector
 local Players    = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UIS        = game:GetService("UserInputService")
@@ -11,65 +11,61 @@ local PGui       = LP:WaitForChild("PlayerGui")
 local CoreGui    = game:GetService("CoreGui")
 
 local CFG = {
-    AutoParry=false,
-    ParryChance=100,
+    AutoParry = false,
+    ParryChance = 100,
 }
 
--- [1] UNIVERSAL PARRY SCANNER
+-- [1] SCANNER TOMBOL PARRY (Fix Error ImageButton)
 local parryBtn = nil
 local function findParryButton()
     parryBtn = nil
-    local folders = {PGui, CoreGui, LP.Character} -- Scan semua tempat
+    local folders = {PGui, CoreGui}
     
     for _, folder in ipairs(folders) do
         for _, obj in ipairs(folder:GetDescendants()) do
             if obj:IsA("TextButton") or obj:IsA("ImageButton") then
-                -- Cari berdasarkan teks atau nama
                 local isParry = false
-                if obj:IsA("TextButton") then
+                
+                -- Cek teks (kalau TextButton)
+                if obj:IsA("TextButton") and obj.Text then
                     if string.find(string.upper(obj.Text), "PARRY") then isParry = true end
                 end
+                
+                -- Cek nama objek (kalau ImageButton)
                 if string.find(string.upper(obj.Name), "PARRY") then isParry = true end
                 
-                -- Pastiin tombolnya ada di layar (bisa dilihat)
                 if isParry and obj.Visible then
                     parryBtn = obj
-                    print("[DG] Parry Button FOUND: " .. obj:GetFullName())
+                    print("[DG] Sukses! Tombol PARRY ketemu: " .. obj:GetFullName())
                     return
                 end
             end
         end
     end
-    print("[DG] Parry Button NOT FOUND. (Pastikan senjata udah di tangan / masuk area PvP)")
+    print("[DG] Tombol PARRY nggak ketemu. Pastikan lo udah megang senjata (di dalam game).")
 end
 
--- [2] INJECTOR (Tembak Tombol)
+-- [2] INJECTOR (Nembak Fungsi Tombol)
 local function tapParry()
     if not parryBtn or not parryBtn.Parent then 
-        findParryButton() -- Coba scan ulang kalau tombolnya ilang
+        findParryButton() -- Scan ulang kalau tombolnya hilang (misal abis respawn)
         if not parryBtn then return end
     end
     
-    -- Metode 1: Fire Event GUI (Langsung tembak fungsi)
+    -- Metode 1: Panggil Fungsi Klik Tombol
     pcall(function() parryBtn.Activated:Fire() end)
     pcall(function() parryBtn.MouseButton1Click:Fire() end)
     
-    -- Metode 2: Simulasi Klik Pakai VIM (Nembak koordinat layar)
+    -- Metode 2: Simulasi Klik Layar di posisi tombol (VIM)
     pcall(function()
         local center = parryBtn.AbsolutePosition + (parryBtn.AbsoluteSize / 2)
-        -- Tap F kalau ternyata game-nya ngebaca keyboard event
-        VIM:SendKeyEvent(true, Enum.KeyCode.F, false, game)
-        task.wait(0.02) 
-        VIM:SendKeyEvent(false, Enum.KeyCode.F, false, game)
-        
-        -- Tap Mouse (Touch)
         VIM:SendMouseButtonEvent(center.X, center.Y, 0, true, game, 0)
         task.wait(0.02)
         VIM:SendMouseButtonEvent(center.X, center.Y, 0, false, game, 0)
     end)
 end
 
--- [3] COMBAT ENGINE (Auto Parry Timing)
+-- [3] COMBAT ENGINE
 local parryCooldown={}
 RunService.PreSimulation:Connect(function()
     if not CFG.AutoParry then return end
@@ -92,7 +88,7 @@ RunService.PreSimulation:Connect(function()
             if not t.IsPlaying then continue end
             
             local targetTime = nil
-            -- Timing dari Source Code (0.933s = 0.15 | 1.2s = 0.42)
+            -- Timing (0.933s = 0.15 | 1.2s = 0.42)
             if math.abs(t.Length - 0.933) < 0.05 then targetTime = 0.15
             elseif math.abs(t.Length - 1.2) < 0.05 then targetTime = 0.42 end
             
@@ -100,7 +96,7 @@ RunService.PreSimulation:Connect(function()
                 if CFG.AutoParry and not parryCooldown[p.UserId] then
                     if t.TimePosition >= targetTime and t.TimePosition <= targetTime + 0.05 then
                         if math.random(1, 100) <= CFG.ParryChance then
-                            tapParry()
+                            tapParry() 
                         end
                         parryCooldown[p.UserId] = true
                         task.delay(0.6, function() parryCooldown[p.UserId] = nil end)
@@ -117,14 +113,11 @@ local F=Enum.Font.Gotham; local FB=Enum.Font.GothamBold
 local function c(o,r) local x=Instance.new("UICorner"); x.CornerRadius=UDim.new(0,r or 6); x.Parent=o end
 local function bindClick(btn, cb) btn.Activated:Connect(cb) end
 
-local guiToggle=Instance.new("ScreenGui"); guiToggle.Name="DG_Toggle_v26"; guiToggle.ResetOnSpawn=false; guiToggle.DisplayOrder=2147483647; guiToggle.Parent=PGui
-local floatBtn = Instance.new("TextButton"); floatBtn.Size = UDim2.new(0, 100, 0, 40); floatBtn.Position = UDim2.new(0.5, -50, 0, 10); floatBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 0); floatBtn.Text = "OPEN MENU"; floatBtn.TextSize = 14; floatBtn.TextColor3 = Color3.new(1,1,1); floatBtn.Font = FB; floatBtn.BorderSizePixel = 0; floatBtn.Visible = false; floatBtn.Parent = guiToggle; c(floatBtn, 6)
-
-local guiMain=Instance.new("ScreenGui"); guiMain.Name="DG_Main_v26"; guiMain.ResetOnSpawn=false; guiMain.DisplayOrder=999; guiMain.Parent=PGui
+local guiMain=Instance.new("ScreenGui"); guiMain.Name="DG_Main_v28"; guiMain.ResetOnSpawn=false; guiMain.DisplayOrder=999; guiMain.Parent=PGui
 local root=Instance.new("Frame"); root.Size=UDim2.new(0,260,0,160); root.Position=UDim2.new(0.5,-130,0.5,-80); root.BackgroundColor3=C.bg; root.BorderSizePixel=0; root.Active=true; root.Parent=guiMain; c(root,10)
 
 local hdr=Instance.new("Frame"); hdr.Size=UDim2.new(1,0,0,40); hdr.BackgroundTransparency=1; hdr.Parent=root
-local title=Instance.new("TextLabel"); title.Size=UDim2.new(1,-40,1,0); title.Position=UDim2.new(0,12,0,0); title.BackgroundTransparency=1; title.Text="DG Hub v26 (Universal)"; title.TextColor3=C.t; title.Font=FB; title.TextSize=14; title.TextXAlignment=Enum.TextXAlignment.Left; title.Parent=hdr
+local title=Instance.new("TextLabel"); title.Size=UDim2.new(1,-40,1,0); title.Position=UDim2.new(0,12,0,0); title.BackgroundTransparency=1; title.Text="DG Hub v28 (Final Inject)"; title.TextColor3=C.t; title.Font=FB; title.TextSize=14; title.TextXAlignment=Enum.TextXAlignment.Left; title.Parent=hdr
 
 local function drag(frame, btn)
     local dragging, start, startPos
@@ -135,11 +128,7 @@ end
 drag(root, title)
 
 local cls=Instance.new("TextButton"); cls.Size=UDim2.new(0,30,0,30); cls.Position=UDim2.new(1,-40,0,5); cls.BackgroundColor3=C.s2; cls.Text="×"; cls.TextColor3=C.t; cls.Font=FB; cls.TextSize=18; cls.Parent=hdr; c(cls,6)
-
-local uiOpen = true
-local function toggleUI() uiOpen = not uiOpen; root.Visible = uiOpen; floatBtn.Visible = not uiOpen end
-bindClick(floatBtn, toggleUI)
-bindClick(cls, function() guiMain:Destroy(); guiToggle:Destroy() end)
+bindClick(cls, function() guiMain:Destroy() end)
 
 local btnScan = Instance.new("TextButton"); btnScan.Size=UDim2.new(1,-20,0,40); btnScan.Position=UDim2.new(0,10,0,50); btnScan.BackgroundColor3=C.s2; btnScan.Text="1. SCAN TOMBOL PARRY"; btnScan.TextColor3=C.t; btnScan.Font=FB; btnScan.TextSize=14; btnScan.Parent=root; c(btnScan,6)
 bindClick(btnScan, findParryButton)
@@ -149,7 +138,4 @@ bindClick(tgl, function()
     CFG.AutoParry = not CFG.AutoParry
     tgl.Text = "Auto-Parry ["..(CFG.AutoParry and "ON" or "OFF").."]"
     tgl.BackgroundColor3 = CFG.AutoParry and C.a or C.s
-    if CFG.AutoParry and not parryBtn then
-        print("[DG] Warning: Tombol parry belum di-scan! Klik SCAN dulu.")
-    end
 end)
