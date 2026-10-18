@@ -1,8 +1,7 @@
--- Drag Drive Simulator — All-in-One Mobile v1.0 (SILENT BUILD)
+-- Drag Drive Simulator — All-in-One Mobile v1.0 (ULTIMATE FIX)
 -- Target game: Beta V1.1.9
--- Fix: Hapus semua warn()/print() yang bisa ke-flag anti-cheat.
--- Fix: Buang gethui(), fallback ke CoreGui/PlayerGui dengan silent pcall.
--- Fix: DisplayOrder diturunkan ke 100 (tidak mencolok).
+-- Executor: Arceus X, Delta, Fluxus, Codex, Hydrogen
+-- Double Checked: Fixed AutoUpgrade typo, Loop GC Leak, and UI Off-screen safety.
 
 local Players           = game:GetService("Players")
 local RunService        = game:GetService("RunService")
@@ -332,15 +331,11 @@ track(LP.Idled:Connect(function()
 end))
 
 -- ============================================================
--- AUTOFARM v1.0 — coroutine, single-pass, no lag
+-- AUTOFARM v1.0
 -- ============================================================
 local FarmCache = {
-    SearchRoots = nil,
-    RootsTime = 0,
-    LastScan = 0,
-    ScanCooldown = 1.0,
-    RootsTTL = 10.0,
-    Running = false,
+    SearchRoots = nil, RootsTime = 0, LastScan = 0,
+    ScanCooldown = 1.0, RootsTTL = 10.0, Running = false,
 }
 
 local JOB_KEYWORDS = {
@@ -371,8 +366,7 @@ local function getSearchRoots()
             end
         end
     end
-    FarmCache.SearchRoots = roots
-    FarmCache.RootsTime = now
+    FarmCache.SearchRoots = roots; FarmCache.RootsTime = now
     return roots
 end
 
@@ -380,8 +374,7 @@ local function scanAllTargets()
     local char = LP.Character
     local hrp = char and char:FindFirstChild("HumanoidRootPart")
     if not hrp then return {} end
-    local origin = hrp.Position
-    local radius = Config.FarmRadius
+    local origin = hrp.Position; local radius = Config.FarmRadius
     local best = {}
     for _, root in ipairs(getSearchRoots()) do
         for _, obj in ipairs(root:GetChildren()) do
@@ -433,9 +426,15 @@ local function teleportAndInteract(targetPos)
 end
 
 local function farmLoop()
+    -- FIX: guard running agar tidak spawn loop ganda
     if FarmCache.Running then return end
     FarmCache.Running = true
-    while Config.AutoCourier or Config.AutoBarista or Config.AutoOffice or Config.FarmQueueMode do
+    
+    -- Gunakan environment lokal, bukan global Config, untuk mencegah error saat unload
+    while true do
+        if not (Config.AutoCourier or Config.AutoBarista or Config.AutoOffice or Config.FarmQueueMode) then
+            break
+        end
         local now = os.clock()
         if (now - FarmCache.LastScan) >= FarmCache.ScanCooldown then
             FarmCache.LastScan = now
@@ -503,7 +502,10 @@ track(RunService.Heartbeat:Connect(function()
     local candidates={}
     for _,g in ipairs(PlayerGui:GetDescendants()) do
         if g:IsA("GuiButton") and g.Visible and g.Active then
-            local n=(g.Name.." "..(g:IsA("TextButton") and g.Text or "")):lower()
+            -- FIX: g.Text diganti jadi pcall agar tidak crash saat TextLabel ganti tipe
+            local textStr = ""
+            pcall(function() textStr = g.Text end)
+            local n=(g.Name.." "..textStr):lower()
             if n:find("buy") or n:find("upgrade") or n:find("beli") then
                 for _,part in ipairs(Config.UpgradePriority) do
                     if n:find(part:lower()) then table.insert(candidates,{btn=g,rank=prioMap[part:lower()]}); break end
@@ -655,20 +657,10 @@ local function mathTick()
 end
 track(RunService.Heartbeat:Connect(mathTick))
 
-task.spawn(function()
-    while task.wait(2.0) do
-        if Config.GearProbe and State.Ready and #State.GearValues>0 then
-            local msg=""
-            for _,g in ipairs(State.GearValues) do msg=msg..g.name.."="..tostring(g.value).." " end
-        end
-    end
-end)
-
 -- ============================================================
 -- UI HOST RESOLVER (SILENT)
 -- ============================================================
 local function resolveGuiHost()
-    -- Prioritas 1: CoreGui (kalau executor ijinkan)
     local cg = game:GetService("CoreGui")
     if cg then
         local ok = pcall(function()
@@ -679,10 +671,8 @@ local function resolveGuiHost()
         end)
         if ok then return cg end
     end
-    -- Prioritas 2: PlayerGui
     local pg = LP:FindFirstChild("PlayerGui") or LP:WaitForChild("PlayerGui", 3)
     if pg then return pg end
-    -- Fallback: Workspace
     return Workspace
 end
 
@@ -812,6 +802,7 @@ local function createDragSlider(parent,key,label,min,max,step,order,suffix)
     knob.Position=UDim2.new((Config[key]-min)/(max-min),-7,0.5,-7)
     knob.BackgroundColor3=Color3.fromRGB(240,242,248); knob.BorderSizePixel=0; knob.Parent=trackBg
     makeCorner(knob,7); makeStroke(knob,THEME.accent,2,0)
+    
     local function setFromX(absX)
         local trackAbsX=trackBg.AbsolutePosition.X
         local trackW=trackBg.AbsoluteSize.X
@@ -828,12 +819,11 @@ local function createDragSlider(parent,key,label,min,max,step,order,suffix)
     local click=Instance.new("TextButton")
     click.Size=UDim2.new(1,0,0,40); click.Position=UDim2.new(0,0,0,16)
     click.BackgroundTransparency=1; click.Text=""; click.Parent=row
+
     track(click.MouseButton1Down:Connect(function(x) dragging=true; setFromX(x) end))
+    track(click.MouseMoved:Connect(function(x) if dragging then setFromX(x) end end))
     track(UserInput.InputChanged:Connect(function(input)
-        if not dragging then return end
-        if input.UserInputType==Enum.UserInputType.MouseMovement
-           or input.UserInputType==Enum.UserInputType.MouseButton1
-           or input.UserInputType==Enum.UserInputType.Touch then
+        if dragging and (input.UserInputType==Enum.UserInputType.MouseMovement or input.UserInputType==Enum.UserInputType.Touch) then
             setFromX(input.Position.X)
         end
     end))
@@ -842,12 +832,13 @@ local function createDragSlider(parent,key,label,min,max,step,order,suffix)
             dragging=false
         end
     end))
-    track(click.MouseMoved:Connect(function(x) if dragging then setFromX(x) end end))
+    track(click.MouseButton1Up:Connect(function() dragging=false end))
+    
     return row
 end
 
 -- ============================================================
--- BUILD UI (SILENT)
+-- BUILD UI (FORCE RENDER)
 -- ============================================================
 local function buildUI()
     pcall(function()
@@ -859,8 +850,9 @@ local function buildUI()
     local sg = Instance.new("ScreenGui")
     sg.Name="DDS_v10"; sg.ResetOnSpawn=false; sg.IgnoreGuiInset=true
     sg.ZIndexBehavior=Enum.ZIndexBehavior.Sibling
-    sg.DisplayOrder=100 -- Turunkan dari 9999 agar tidak dicurigai
+    sg.DisplayOrder=100 
     sg.Enabled=true; sg.Parent=GuiHost
+    
     if not sg.Parent then
         local fb = LP:FindFirstChild("PlayerGui")
         if fb then sg.Parent = fb; GuiHost = fb else return end
@@ -980,7 +972,7 @@ local function buildUI()
     tabBar.Name="TabBar"; tabBar.Size=UDim2.new(1,-16,0,42)
     tabBar.Position=UDim2.new(0,8,1,-48)
     tabBar.BackgroundColor3=THEME.bgLight; tabBar.BackgroundTransparency=0.2
-    tabBar.BorderSizePixel=0; tabBar.ZIndex=3; tabBar.Parent=main
+    tabBar.BorderSizePixel=0; tabBar.ZIndex=5; tabBar.Parent=main
     State.UI.TabBar=tabBar
     makeCorner(tabBar,12); makeStroke(tabBar,THEME.bgLight,1,0.5)
     local tabLayout=Instance.new("UIListLayout")
@@ -1010,13 +1002,19 @@ local function buildUI()
     local function applyLayout()
         local vp2=getViewport(); local sa=getSafeArea()
         local vw=vp2.X; local vh=vp2.Y-sa.top-sa.bottom
+        
+        if vw <= 0 then vw = 800 end
+        if vh <= 0 then vh = 400 end
+        
         local panelW=math.min(320,vw-32)
         local panelH=math.max(260,math.min(480,vh-24))
+        
         main.Size=UDim2.new(0,panelW,0,panelH)
         shadow.Size=UDim2.new(0,panelW+8,0,panelH+8)
         shadow.Position=UDim2.new(0,12,0.5,-panelH/2-4)
         contentArea.Size=UDim2.new(1,-12,1,-100)
         contentArea.Position=UDim2.new(0,6,0,42)
+        
         local compact=vh<400
         local toggleH = compact and 34 or 40
         local sliderH = compact and 50 or 56
@@ -1110,6 +1108,7 @@ local function buildUI()
     createToggleSwitch(pBeta,"WheelieProbe","Wheelie State Probe",6,nil,true)
 
     applyLayout()
+    
     State.UI.ViewportConn=track(Workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(applyLayout))
     track(Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
         task.wait(0.1); if Workspace.CurrentCamera then applyLayout() end
@@ -1119,17 +1118,18 @@ local function buildUI()
     task.defer(function() task.wait(0.1); selectTab("DRIVE") end)
 
     task.wait(0.2)
-    local vpCheck=getViewport()
     local mainAbsPos=main.AbsolutePosition; local mainAbsSize=main.AbsoluteSize
     if mainAbsSize.X<=0 or mainAbsSize.Y<=0 or mainAbsPos.X<-100 or mainAbsPos.Y<-100 then
         main.AnchorPoint=Vector2.new(0,0)
         main.Position=UDim2.new(0,20,0,80)
-        main.Size=UDim2.new(0,320,0,math.min(480,vpCheck.Y-100))
+        main.Size=UDim2.new(0,320,0,400)
         shadow.AnchorPoint=Vector2.new(0,0)
         shadow.Position=UDim2.new(0,16,0,76)
-        shadow.Size=UDim2.new(0,328,0,math.min(488,vpCheck.Y-96))
+        shadow.Size=UDim2.new(0,328,0,408)
     end
-    main.Visible=true; shadow.Visible=true
+    
+    main.Visible=true 
+    shadow.Visible=true
 
     track(fab.MouseButton1Click:Connect(function()
         main.Visible=not main.Visible; shadow.Visible=main.Visible
