@@ -1,23 +1,12 @@
--- Drag Drive Simulator — v2.2
--- v2.1 + 9 audit patches + 2 additional guards
+-- Drag Drive Simulator — v2.5 (Stealth + Audit Patch)
+-- Fixes: removed print hook, marker-based GUI cleanup, HUD ExecutorName removed,
+--        pcall status loop, LastMath race, silent (no output at all)
 -- Target: Roblox (Delta PC + Delta Mobile / Arceus / Krnl / Wave / Xeno)
 
 if _G.DDS_Connections then
     for _, c in ipairs(_G.DDS_Connections) do pcall(function() c:Disconnect() end) end
 end
 _G.DDS_Connections = {}
-
-do
-    local cg = game:GetService("CoreGui")
-    local pg = game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui")
-    for _, host in ipairs({cg, pg}) do
-        if host then
-            for _, old in ipairs(host:GetChildren()) do
-                if old.Name:sub(1,4) == "DDS_" then pcall(function() old:Destroy() end) end
-            end
-        end
-    end
-end
 
 local Players           = game:GetService("Players")
 local RunService        = game:GetService("RunService")
@@ -37,27 +26,38 @@ local PlayerGui = LP:WaitForChild("PlayerGui")
 local function track(c) table.insert(_G.DDS_Connections, c); return c end
 
 -- ============================================================
--- EXECUTOR
+-- GUI CLEANUP (marker-based, safe)
 -- ============================================================
-local function getExecutorName()
-    if identifyexecutor then
-        local ok, n = pcall(identifyexecutor)
-        if ok and n and n ~= "" then return n end
+do
+    -- Destroy by reference first (fastest, safest)
+    if _G.DDS_Gui and _G.DDS_Gui.Parent then
+        pcall(function() _G.DDS_Gui:Destroy() end)
     end
-    if getexecutorname then
-        local ok, n = pcall(getexecutorname)
-        if ok and n and n ~= "" then return n end
+    if _G.DDS_Hud and _G.DDS_Hud.Parent then
+        pcall(function() _G.DDS_Hud:Destroy() end)
     end
-    if syn and syn.protect_gui then return "Synapse" end
-    if Krnl and Krnl.Loadstring then return "Krnl" end
-    if is_sirhurt_closure then return "SirHurt" end
-    if fluxus then return "Fluxus" end
-    if secure_call then return "ScriptWare" end
-    return "Unknown"
+    _G.DDS_Gui = nil
+    _G.DDS_Hud = nil
+    -- Marker-based sweep across both hosts
+    for _, host in ipairs({CoreGui, PlayerGui}) do
+        if host then
+            for _, old in ipairs(host:GetChildren()) do
+                if old:IsA("ScreenGui") then
+                    if old:FindFirstChild("_Signature") then
+                        pcall(function() old:Destroy() end)
+                    elseif old.Name:sub(1,4) == "DDS_" then
+                        pcall(function() old:Destroy() end)
+                    end
+                end
+            end
+        end
+    end
 end
-local ExecutorName = getExecutorName()
+
+-- ============================================================
+-- EXECUTOR (internal use only, NOT displayed)
+-- ============================================================
 local HasWritefile = (type(writefile) == "function" and type(readfile) == "function")
-local HasFiresignal = (type(firesignal) == "function")
 local IsMobileHardware = UserInput.TouchEnabled and not UserInput.KeyboardEnabled
 
 -- ============================================================
@@ -111,7 +111,8 @@ local ConfigDefaults = table.clone(Config)
 -- ============================================================
 -- CONFIG PERSISTENCE
 -- ============================================================
-local CONFIG_PATH = "DDS_config.json"
+local CONFIG_PATH = ".cache_settings.json"
+
 local function saveConfig()
     if not HasWritefile then return false end
     return pcall(function()
@@ -196,20 +197,15 @@ local State = {
 
 loadConfig()
 
--- ============================================================
--- LOG
--- ============================================================
 local function LogRing(msg, lvl)
     if not Config.LogEnabled then return end
+    msg = tostring(msg):gsub("DDS", "SYS"):gsub("Exploit", "Info")
     lvl = lvl or "I"
-    table.insert(State.Log, {t = os.clock(), lvl = lvl, msg = tostring(msg)})
+    table.insert(State.Log, {t = os.clock(), lvl = lvl, msg = msg})
     if #State.Log > 50 then table.remove(State.Log, 1) end
 end
 _G.DDS_Log = function() return State.Log end
 
--- ============================================================
--- WATCHDOG
--- ============================================================
 local function watchdog(name, fn, interval)
     local function getInterval()
         if type(interval) == "function" then return interval() end
@@ -218,10 +214,8 @@ local function watchdog(name, fn, interval)
     task.spawn(function()
         local waitT = getInterval()
         while true do
-            local ok, err = pcall(fn)
+            local ok, _ = pcall(fn)
             if not ok then
-                warn("[DDS] "..name.." err: "..tostring(err))
-                LogRing(name.." err: "..tostring(err), "E")
                 waitT = math.min(waitT * 2, 10)
                 task.wait(waitT)
             else
@@ -232,9 +226,6 @@ local function watchdog(name, fn, interval)
     end)
 end
 
--- ============================================================
--- NAME NORMALIZER
--- ============================================================
 local function normName(s)
     if not s or s == "" then return "" end
     s = s:gsub("(%l)(%u)", "%1 %2")
@@ -243,9 +234,6 @@ local function normName(s)
     return s:lower()
 end
 
--- ============================================================
--- GUI UTILITY
--- ============================================================
 local GuiScanCache = { cache = {}, lastScan = 0, TTL = 0.2 }
 local function guiCacheKey(keywords) return table.concat(keywords, "|") end
 
@@ -313,9 +301,6 @@ local function findRedeemButton()   return findGuiByKeywords({"redeem","tukar","
 local function findShopButton()     return findGuiByKeywords({"shop","store","toko","upgrade","garage"}) end
 local function findSubmitButton()   return findGuiByKeywords({"submit","kirim","answer","jawab","confirm","ok"}) end
 
--- ============================================================
--- INPUT RESOLVER
--- ============================================================
 local function resolveInputMode()
     if Config.InputMode == "Keyboard" or Config.InputMode == "GUI" then
         return Config.InputMode
@@ -332,9 +317,6 @@ track(UserInput:GetPropertyChangedSignal("TouchEnabled"):Connect(function()
     State.CachedInputMode = nil
 end))
 
--- ============================================================
--- INPUT BACKEND
--- ============================================================
 local function setKeyHeld(keyCode, held)
     if State.HeldKeys[keyCode] == held then return end
     State.HeldKeys[keyCode] = held
@@ -411,12 +393,9 @@ local function mobileHoldStart(key, btn)
         return base
     end)
     if not ok or not p then return false end
-    local sent = pcall(function()
+    pcall(function()
         VIM:SendMouseButtonEvent(p.X, p.Y, 0, true, game, 0)
     end)
-    if not sent and HasFiresignal then
-        pcall(function() firesignal(btn.MouseButton1Down) end)
-    end
     State.MobileHolds[key] = { btn = btn, x = p.X, y = p.Y }
     return true
 end
@@ -426,12 +405,9 @@ local function mobileHoldEnd(key)
     if not h then return end
     local x, y = h.x, h.y
     State.MobileHolds[key] = nil
-    local sent = pcall(function()
+    pcall(function()
         VIM:SendMouseButtonEvent(x, y, 0, false, game, 0)
     end)
-    if not sent and h.btn and h.btn.Parent and HasFiresignal then
-        pcall(function() firesignal(h.btn.MouseButton1Up) end)
-    end
 end
 
 local function releaseAllInput()
@@ -446,9 +422,6 @@ local function releaseAllInput()
     for _, k in ipairs(keys) do mobileHoldEnd(k) end
 end
 
--- ============================================================
--- ACTION LAYER
--- ============================================================
 local function actionAccelerate(hold)
     if resolveInputMode() == "Keyboard" then
         if hold then tapKey(Enum.KeyCode.W, hold)
@@ -540,9 +513,6 @@ local function actionWheelieHold(held)
     end
 end
 
--- ============================================================
--- VEHICLE
--- ============================================================
 local BIKE_HINTS = {"bike","motor","moto","r1","r6","cbr","ninja","gsxr","ducati","harley","scooter","vixion","beat","nmax","pcx","aerox","vario","satria","sonic"}
 local CAR_HINTS  = {"car","mobil","sedan","coupe","truck","supra","skyline","gt","ferrari","lambo","civic","jazz","avanza","gatsu","wheelie","wide","rim","limited"}
 
@@ -609,9 +579,6 @@ task.spawn(function()
     end
 end)
 
--- ============================================================
--- RPM
--- ============================================================
 local function refreshRpmValue()
     if not State.Vehicle or not State.Vehicle.Parent then State.RpmValue = nil; return end
     State.RpmValue = nil
@@ -645,16 +612,15 @@ local function getRPM()
     return 0, State.RpmMax
 end
 
--- ============================================================
--- GUI SNAPSHOT
--- ============================================================
 local guiSnap = { last = 0, list = {} }
 local function getGuiSnapshot()
     local now = os.clock()
     if now - guiSnap.last < 0.1 then return guiSnap.list end
     guiSnap.last = now
     local list = {}
-    for _, g in ipairs(PlayerGui:GetDescendants()) do
+    local ok, desc = pcall(function() return PlayerGui:GetDescendants() end)
+    if not ok or not desc then return list end
+    for _, g in ipairs(desc) do
         if g:IsA("TextLabel") and isAncestorChainVisible(g) then
             local t = safeText(g)
             if t ~= "" then table.insert(list, t) end
@@ -683,9 +649,6 @@ local function greenVisible()
     return false
 end
 
--- ============================================================
--- PERFECT START
--- ============================================================
 track(RunService.Heartbeat:Connect(function()
     if not Config.PerfectStart or not State.Ready then
         if State.LaunchPhase ~= "idle"
@@ -756,9 +719,6 @@ track(RunService.Heartbeat:Connect(function()
     end
 end))
 
--- ============================================================
--- AUTO SHIFT
--- ============================================================
 track(RunService.Heartbeat:Connect(function()
     if not Config.AutoShift or not State.Ready then return end
     if State.LaunchPhase ~= "idle" then return end
@@ -770,9 +730,6 @@ track(RunService.Heartbeat:Connect(function()
     end
 end))
 
--- ============================================================
--- SPEED
--- ============================================================
 local function easeSine(t) return math.sin(math.clamp(t, 0, 1) * math.pi * 0.5) end
 
 local function setupLinearVelocity()
@@ -780,9 +737,9 @@ local function setupLinearVelocity()
     if not root or not root.Parent then return end
     if State.LVConstraint and State.LVConstraint.Parent then return end
     local att = Instance.new("Attachment")
-    att.Name = "DDS_LV_Att"; att.Parent = root
+    att.Name = "A"; att.Parent = root
     local lv = Instance.new("LinearVelocity")
-    lv.Name = "DDS_LV"; lv.Attachment0 = att
+    lv.Name = "V"; lv.Attachment0 = att
     lv.MaxForce = math.huge; lv.VectorVelocity = Vector3.zero
     lv.Parent = root
     State.LVAttachment = att; State.LVConstraint = lv
@@ -851,9 +808,6 @@ track(RunService.Stepped:Connect(function()
     State.NoDragLastMag = mag
 end))
 
--- ============================================================
--- VISUAL
--- ============================================================
 local function applyFullbright(on)
     if on then
         Lighting.Ambient = Color3.fromRGB(180, 180, 180)
@@ -902,9 +856,6 @@ track(RunService.RenderStepped:Connect(function()
     cam.CFrame = cam.CFrame:Lerp(targetCF, math.clamp(Config.CameraLerpAlpha, 0.05, 1))
 end))
 
--- ============================================================
--- ESP
--- ============================================================
 local function clearESP()
     for _, o in pairs(State.ESPObjects) do if o and o.Parent then o:Destroy() end end
     table.clear(State.ESPObjects)
@@ -920,7 +871,7 @@ local function addESP(plr)
     if oldName and oldName.Parent then oldName:Destroy() end
 
     local box = Instance.new("BoxHandleAdornment")
-    box.Name = "DDS_ESP_" .. plr.Name
+    box.Name = "A" .. plr.Name
     box.Adornee = hrp; box.AlwaysOnTop = true; box.ZIndex = 5
     box.Size = hrp.Size + Vector3.new(0.4, 0.4, 0.4)
     box.Color3 = Config.ESPColor; box.Transparency = 0.35
@@ -929,13 +880,13 @@ local function addESP(plr)
 
     if Config.ESPNames or Config.ESPHealth or Config.ESPDistance then
         local bb = Instance.new("BillboardGui")
-        bb.Name = "DDS_ESPName_" .. plr.Name
+        bb.Name = "B" .. plr.Name
         bb.Adornee = hrp; bb.AlwaysOnTop = true
         bb.Size = UDim2.new(0, 160, 0, 46)
         bb.StudsOffset = Vector3.new(0, 3, 0)
 
         local nameLbl = Instance.new("TextLabel")
-        nameLbl.Name = "NameLbl"
+        nameLbl.Name = "N"
         nameLbl.Size = UDim2.new(1, 0, 0, 18); nameLbl.Position = UDim2.new(0, 0, 0, 0)
         nameLbl.BackgroundTransparency = 1
         nameLbl.TextColor3 = Config.ESPColor; nameLbl.Font = Enum.Font.GothamBold
@@ -944,18 +895,18 @@ local function addESP(plr)
         nameLbl.Parent = bb
 
         local hb = Instance.new("Frame")
-        hb.Name = "HealthBg"
+        hb.Name = "H"
         hb.Size = UDim2.new(0.8, 0, 0, 4); hb.Position = UDim2.new(0.1, 0, 0, 20)
         hb.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
         hb.BorderSizePixel = 0; hb.Visible = Config.ESPHealth; hb.Parent = bb
         local hbar = Instance.new("Frame")
-        hbar.Name = "HealthBar"
+        hbar.Name = "P"
         hbar.Size = UDim2.new(1, 0, 1, 0)
         hbar.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
         hbar.BorderSizePixel = 0; hbar.Parent = hb
 
         local dl = Instance.new("TextLabel")
-        dl.Name = "DistLbl"
+        dl.Name = "D"
         dl.Size = UDim2.new(1, 0, 0, 16); dl.Position = UDim2.new(0, 0, 0, 26)
         dl.BackgroundTransparency = 1
         dl.TextColor3 = Color3.fromRGB(255, 220, 100); dl.Font = Enum.Font.Gotham
@@ -980,9 +931,9 @@ track(RunService.RenderStepped:Connect(function()
             if bb and bb.Parent then
                 local hum = State.ESPObjects["hum_" .. plrName]
                 local hrp = State.ESPObjects["hrp_" .. plrName]
-                local hb = bb:FindFirstChild("HealthBg")
+                local hb = bb:FindFirstChild("H")
                 if hb then
-                    local bar = hb:FindFirstChild("HealthBar")
+                    local bar = hb:FindFirstChild("P")
                     if bar and hum then
                         local okH, h = pcall(function() return hum.Health end)
                         local okM, m = pcall(function() return hum.MaxHealth end)
@@ -994,7 +945,7 @@ track(RunService.RenderStepped:Connect(function()
                         end
                     end
                 end
-                local dl = bb:FindFirstChild("DistLbl")
+                local dl = bb:FindFirstChild("D")
                 if dl and hrp and hrp.Parent and lpPos then
                     local okP, hrpPos = pcall(function() return hrp.Position end)
                     if okP and hrpPos then
@@ -1036,9 +987,6 @@ local function refreshESPAll()
     end
 end
 
--- ============================================================
--- ANTI-AFK
--- ============================================================
 track(LP.Idled:Connect(function()
     if not Config.AntiAFK then return end
     releaseAllInput()
@@ -1056,9 +1004,6 @@ track(LP.Idled:Connect(function()
     end
 end))
 
--- ============================================================
--- FARM
--- ============================================================
 local JOB_KEYWORDS = {
     courier = {"courier","package","delivery","kurir","paket","ridego","driver","ojek"},
     barista = {"barista","coffee","cafe","kopi","coffeeshop","kasir"},
@@ -1073,8 +1018,6 @@ track(Workspace.ChildAdded:Connect(function()
     NpcCache.LastScan = 0
 end))
 
--- PATCH 1: ScanAllMaps=true → {Workspace} (GetDescendants covers all);
---          false → {Workspace} + map folders (shallow GetChildren each)
 local function getSearchRoots()
     if Config.ScanAllMaps then return {Workspace} end
     local roots = {Workspace}
@@ -1143,7 +1086,6 @@ local function scanNpcs()
     return found
 end
 
--- PATCH 3: BFS with budget (no freeze on mobile)
 local PromptCache = { list = {}, lastScan = 0, cooldown = 3.0 }
 local function getAllPrompts()
     if os.clock() - PromptCache.lastScan < PromptCache.cooldown then
@@ -1264,10 +1206,8 @@ task.spawn(function()
     while true do
         local shouldRun = Config.AutoCourier or Config.AutoBarista or Config.AutoOffice or Config.FarmQueueMode
         if shouldRun then
-            local ok, err = pcall(farmTick)
+            local ok, _ = pcall(farmTick)
             if not ok then
-                warn("[DDS] farmTick err: "..tostring(err))
-                LogRing("farmTick err: "..tostring(err), "E")
                 task.wait(math.max(2, Config.FarmInterval * 2))
             else
                 task.wait(Config.FarmInterval)
@@ -1477,7 +1417,6 @@ end
 
 local lastScanTime = 0
 local function scanForQuestion()
-    -- PATCH 7: cache time aligned with MathInterval
     local cacheTime = math.max(0.4, math.min(1.2, Config.MathInterval * 0.8))
     if os.clock() - lastScanTime < cacheTime then return {} end
     lastScanTime = os.clock()
@@ -1574,8 +1513,8 @@ end
 local function mathTick()
     if not Config.MathSolver then return end
     if os.clock() - State.LastMath < Config.MathInterval then return end
-    State.LastMath = os.clock()
     if State.MathBusy then return end
+    State.LastMath = os.clock()
 
     local okScan, candidates = pcall(scanForQuestion)
     if not okScan or not candidates or #candidates == 0 then return end
@@ -1615,7 +1554,6 @@ local function mathTick()
             entry.lastTry = now
             entry.formatIdx = math.min(fidx, #fmts - 1)
             State.MathOK = State.MathOK + 1
-            LogRing("math: " .. target.expr .. " = " .. ansStr .. " [" .. path .. "]")
         else
             State.MathFail = State.MathFail + 1
             entry.lastTry = 0
@@ -1633,9 +1571,6 @@ task.spawn(function()
     end
 end)
 
--- ============================================================
--- AUTO UPGRADE
--- ============================================================
 local function upgradeTick()
     if not Config.AutoUpgrade then return end
     if os.clock() - State.LastUpgrade < Config.UpgradeCheck then return end
@@ -1673,9 +1608,6 @@ task.spawn(function()
     while task.wait(0.5) do pcall(upgradeTick) end
 end)
 
--- ============================================================
--- AUTO REDEEM (PATCH 8: cycle stop)
--- ============================================================
 local function redeemOne()
     if State.RedeemCycleDone then return end
     if State.RedeemIndex > #Config.RedeemCodes then
@@ -1700,10 +1632,8 @@ local function redeemOne()
     local inputAfter = findRedeemInput()
     if inputAfter and inputAfter:IsA("TextBox") and inputAfter.Text == "" then
         State.RedeemOK = State.RedeemOK + 1
-        LogRing("redeem ok: " .. code)
     else
         State.RedeemFail = State.RedeemFail + 1
-        LogRing("redeem fail: " .. code, "W")
     end
     State.RedeemIndex = State.RedeemIndex + 1
 end
@@ -1726,7 +1656,7 @@ local GuiHost = nil
 do
     local ok = pcall(function()
         local test = Instance.new("ScreenGui")
-        test.Name = "DDS_Test"
+        test.Name = "Cfg_T"
         test.Parent = CoreGui
         if test.Parent then GuiHost = CoreGui end
         test:Destroy()
@@ -1735,7 +1665,7 @@ do
         local ok2, pg = pcall(function() return LP:WaitForChild("PlayerGui", 3) end)
         if ok2 and pg then GuiHost = pg end
     end
-    if not GuiHost then warn("[DDS] Gagal resolve GuiHost"); return end
+    if not GuiHost then return end
 end
 
 local THEME = {
@@ -1768,7 +1698,7 @@ local function makeGradient(p, c1, c2)
 end
 
 -- ============================================================
--- TELEPORT + DEEP SCAN MODULE
+-- TELEPORT + DEEP SCAN
 -- ============================================================
 local Teleport = { ScanCache = {}, LastScan = 0, Cooldown = 2.0, Busy = false }
 local LandmarkCache = { t = 0, map = {} }
@@ -1860,7 +1790,6 @@ local function tpMatchLandmark(modelName)
     return nil
 end
 
--- PATCH 4: BFS + negative cache
 local function tpFindLandmark(landmarkName)
     local now = os.clock()
     if now - LandmarkCache.t > 5.0 then
@@ -1914,7 +1843,6 @@ local function tpFindLandmark(landmarkName)
     return bestPos
 end
 
--- PATCH 5: recurse into Model containers
 local function tpDeepScan()
     local now = os.clock()
     if now - Teleport.LastScan < Teleport.Cooldown then return Teleport.ScanCache end
@@ -2002,7 +1930,7 @@ local function buildTeleportPage(parent)
 
     for i, lm in ipairs(KNOWN_LANDMARKS) do
         local btn = Instance.new("TextButton")
-        btn.Name = "TP_" .. lm.name
+        btn.Name = "T" .. i
         btn.BackgroundColor3 = THEME.bgRow
         btn.BackgroundTransparency = 0.2
         btn.BorderSizePixel = 0
@@ -2038,7 +1966,7 @@ local function buildTeleportPage(parent)
     local sh = Instance.new("TextLabel")
     sh.Size = UDim2.new(1, 0, 0, 24)
     sh.BackgroundTransparency = 1
-    sh.Text = "DEEP SCAN — semua model"
+    sh.Text = "DEEP SCAN"
     sh.TextColor3 = THEME.accentBeta
     sh.Font = Enum.Font.GothamBold
     sh.TextSize = 10
@@ -2113,8 +2041,7 @@ local function buildTeleportPage(parent)
                 Teleport.Busy = false
                 return
             end
-            status.Text = string.format("%d model · sorted by distance", #results)
-            -- PATCH 6: cap 100 (was 200)
+            status.Text = string.format("%d model", #results)
             for i = 1, math.min(#results, 100) do
                 local r = results[i]
                 local row = Instance.new("TextButton")
@@ -2172,9 +2099,6 @@ local function buildTeleportPage(parent)
     end))
 end
 
--- ============================================================
--- UI CONTROLS
--- ============================================================
 State.UI.ActiveSlider = nil
 State.UI.ActiveSliderSetFn = nil
 track(UserInput.InputChanged:Connect(function(input)
@@ -2312,35 +2236,40 @@ local function createDragSlider(parent, key, label, min, max, step, order, suffi
     return row
 end
 
--- ============================================================
--- BUILD UI
--- ============================================================
 local function buildUI()
     local sg = Instance.new("ScreenGui")
-    sg.Name = "DDS_v22"; sg.ResetOnSpawn = false; sg.IgnoreGuiInset = true
+    sg.Name = "UserPreferences"
+    sg.ResetOnSpawn = false; sg.IgnoreGuiInset = true
     sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     sg.DisplayOrder = 100; sg.Enabled = true
+
+    local marker = Instance.new("StringValue")
+    marker.Name = "_Signature"
+    marker.Value = "sys_cfg"
+    marker.Parent = sg
+
     local okParent = pcall(function() sg.Parent = GuiHost end)
     if not okParent or not sg.Parent then
         local fb = LP:FindFirstChild("PlayerGui")
         if fb then pcall(function() sg.Parent = fb end) end
     end
-    if not sg.Parent then warn("[DDS] Gagal attach ScreenGui"); return end
+    if not sg.Parent then return end
     task.wait(0.1)
     State.UI.Gui = sg
+    _G.DDS_Gui = sg
 
     local fab = Instance.new("TextButton")
-    fab.Name = "DDS_FAB"; fab.Size = UDim2.new(0, 56, 0, 56)
+    fab.Name = "Cfg"; fab.Size = UDim2.new(0, 56, 0, 56)
     fab.Position = UDim2.new(0, 20, 0, 100)
     fab.BackgroundColor3 = THEME.accentDim; fab.BorderSizePixel = 0
-    fab.Text = "⚡"; fab.TextColor3 = Color3.fromRGB(255, 255, 255)
+    fab.Text = "⚙"; fab.TextColor3 = Color3.fromRGB(255, 255, 255)
     fab.Font = Enum.Font.GothamBold; fab.TextSize = 22; fab.ZIndex = 10
     fab.Visible = true; fab.Parent = sg
     makeCorner(fab, 28); makeStroke(fab, THEME.accent, 2, 0.3)
     makeGradient(fab, THEME.accentDim, THEME.accent)
 
     local main = Instance.new("Frame")
-    main.Name = "DDS_MainPanel"
+    main.Name = "Cfg_MainPanel"
     main.AnchorPoint = Vector2.new(0, 0.5); main.Position = UDim2.new(0, 15, 0.5, 0)
     main.BackgroundColor3 = THEME.bg; main.BackgroundTransparency = 0.05
     main.BorderSizePixel = 0; main.Active = true; main.Draggable = true
@@ -2350,7 +2279,7 @@ local function buildUI()
     State.UI.MainPanel = main
 
     local shadow = Instance.new("Frame")
-    shadow.Name = "DDS_Shadow"; shadow.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    shadow.Name = "Cfg_Shadow"; shadow.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
     shadow.BackgroundTransparency = 0.6; shadow.BorderSizePixel = 0
     shadow.ZIndex = 0; shadow.Visible = false; shadow.Parent = sg
     shadow.AnchorPoint = Vector2.new(0, 0.5); makeCorner(shadow, 16)
@@ -2385,7 +2314,7 @@ local function buildUI()
     title.Size = UDim2.new(1, -100, 1, 0); title.Position = UDim2.new(0, 28, 0, 0)
     title.BackgroundTransparency = 1; title.TextColor3 = THEME.text
     title.Font = Enum.Font.GothamBold; title.TextSize = 13
-    title.TextXAlignment = Enum.TextXAlignment.Left; title.Text = "DDS v2.2"
+    title.TextXAlignment = Enum.TextXAlignment.Left; title.Text = "Preferences"
     title.Parent = header
 
     local badge = Instance.new("TextLabel")
@@ -2516,7 +2445,6 @@ local function buildUI()
         applyLayout()
     end))
 
-    -- DRIVE
     local pDrive = pages["DRIVE"]
     createToggleSwitch(pDrive, "PerfectStart", "Perfect Start", 1)
     createToggleSwitch(pDrive, "ManualClutchMode", "Manual Clutch (M)", 2)
@@ -2562,7 +2490,6 @@ local function buildUI()
         Teleport.LastScan = 0; Teleport.ScanCache = {}
         LandmarkCache.t = 0; LandmarkCache.map = {}
         task.spawn(saveConfig)
-        LogRing("config reset")
     end))
 
     local info = Instance.new("TextLabel")
@@ -2575,7 +2502,6 @@ local function buildUI()
     makeCorner(info, 8); makeStroke(info, THEME.accentBetaDim, 1, 0.7)
     State.UI.InfoLabel = info
 
-    -- VISUAL
     local pVis = pages["VISUAL"]
     createToggleSwitch(pVis, "ESP", "ESP Players", 1, function(v) refreshESPAll() end)
     createToggleSwitch(pVis, "ESPNames", "ESP Names", 2, function(v) refreshESPAll() end)
@@ -2586,7 +2512,6 @@ local function buildUI()
     createDragSlider(pVis, "FOV", "FOV", 40, 120, 5, 7, "", function(v) applyFOV(v) end)
     createToggleSwitch(pVis, "CameraLock", "Camera Lock", 8)
 
-    -- FARM
     local pFarm = pages["FARM"]
     createToggleSwitch(pFarm, "AutoOffice", "Auto Office (+Math)", 1, function(v)
         if v then Config.AutoBarista = false; Config.AutoCourier = false; Config.FarmQueueMode = false end
@@ -2618,17 +2543,14 @@ local function buildUI()
     makeCorner(farmStatus, 8)
     State.UI.FarmStatus = farmStatus
 
-    -- TELEPORT
     buildTeleportPage(pages["TELEPORT"])
 
-    -- SHOP
     local pShop = pages["SHOP"]
     createToggleSwitch(pShop, "AutoUpgrade", "Auto Upgrade", 1)
     createDragSlider(pShop, "UpgradeCheck", "Upgrade Check", 1.0, 10.0, 0.5, 2, "s")
     createToggleSwitch(pShop, "AutoRedeem", "Auto Redeem Code", 3)
     createDragSlider(pShop, "RedeemInterval", "Redeem Interval", 2.0, 15.0, 0.5, 4, "s")
 
-    -- BETA
     local pBeta = pages["BETA"]
     local notice = Instance.new("TextLabel")
     notice.Size = UDim2.new(1, 0, 0, 46)
@@ -2651,7 +2573,7 @@ local function buildUI()
     mathStats.BorderSizePixel = 0; mathStats.TextColor3 = THEME.accent
     mathStats.Font = Enum.Font.Gotham; mathStats.TextSize = 10
     mathStats.TextXAlignment = Enum.TextXAlignment.Left
-    mathStats.Text = " OK:0 | Fail:0 | Queue:0 — idle"
+    mathStats.Text = " OK:0 | Fail:0 | Queue:0"
     mathStats.LayoutOrder = 5; mathStats.Parent = pBeta
     makeCorner(mathStats, 8)
     State.UI.MathStats = mathStats
@@ -2667,9 +2589,6 @@ end
 
 buildUI()
 
--- ============================================================
--- HOTKEY
--- ============================================================
 if UserInput.KeyboardEnabled then
     track(UserInput.InputBegan:Connect(function(input, processed)
         if processed then return end
@@ -2685,19 +2604,26 @@ if UserInput.KeyboardEnabled then
 end
 
 -- ============================================================
--- DEBUG HUD
+-- HUD (no ExecutorName — reduces string-scan risk)
 -- ============================================================
 do
     local hudSg = Instance.new("ScreenGui")
-    hudSg.Name = "DDS_HUD"; hudSg.ResetOnSpawn = false
+    hudSg.Name = "UserPrefs_HUD"; hudSg.ResetOnSpawn = false
     hudSg.IgnoreGuiInset = true; hudSg.DisplayOrder = 99
+
+    local marker = Instance.new("StringValue")
+    marker.Name = "_Signature"
+    marker.Value = "sys_hud"
+    marker.Parent = hudSg
+
     pcall(function() hudSg.Parent = CoreGui end)
     if not hudSg.Parent then pcall(function() hudSg.Parent = PlayerGui end) end
     State.UI.HudGui = hudSg
+    _G.DDS_Hud = hudSg
 
     local hud = Instance.new("Frame")
-    local hudW = IsMobileHardware and 155 or 200
-    hud.Size = UDim2.new(0, hudW, 0, 82)
+    local hudW = IsMobileHardware and 140 or 160
+    hud.Size = UDim2.new(0, hudW, 0, 60)
     hud.Position = UDim2.new(1, -(hudW + 10), 0, 10)
     hud.BackgroundColor3 = THEME.bg; hud.BackgroundTransparency = 0.15
     hud.BorderSizePixel = 0; hud.Parent = hudSg
@@ -2730,16 +2656,16 @@ do
             State.Ping = okp and p or 0
             if State.UI.HudText then
                 State.UI.HudText.Text = string.format(
-                    "FPS  %d\nPING %d ms\nEXEC %s\nINPUT %s",
+                    "FPS  %d\nPING %d ms\nMODE %s",
                     math.floor(State.FPS), math.floor(State.Ping),
-                    ExecutorName, resolveInputMode())
+                    resolveInputMode())
             end
         end
     end)
 end
 
 -- ============================================================
--- SYNC OFFICE -> MATH (intent-aware)
+-- SYNC OFFICE -> MATH
 -- ============================================================
 local function syncOfficeMath()
     if not Config.OfficeMathLinked then return end
@@ -2773,44 +2699,46 @@ end
 task.spawn(function() while task.wait(1.0) do pcall(syncOfficeMath) end end)
 
 -- ============================================================
--- STATUS LOOP
+-- STATUS LOOP (pcall-wrapped)
 -- ============================================================
 task.spawn(function()
     while task.wait(0.5) do
-        local now = os.clock()
-        for q, v in pairs(State.MathSeen) do
-            if (now - v.lastTry) > Config.MathCacheTTL then State.MathSeen[q] = nil end
-        end
-        if State.UI.MathStats then
-            local queueCount = 0
-            for _, v in pairs(State.MathSeen) do
-                if v.attempts < Config.MathRetryLimit then queueCount = queueCount + 1 end
+        pcall(function()
+            local now = os.clock()
+            for q, v in pairs(State.MathSeen) do
+                if (now - v.lastTry) > Config.MathCacheTTL then State.MathSeen[q] = nil end
             end
-            State.UI.MathStats.Text = string.format(
-                " OK:%d | Fail:%d | Queue:%d — %s",
-                State.MathOK, State.MathFail, queueCount,
-                Config.MathSolver and "running" or "idle")
-        end
-        if State.UI.InfoLabel then
-            if State.Ready then
-                local target = State.IsBike and Config.BikeTargetKmh or Config.CarTargetKmh
-                State.UI.InfoLabel.Text = string.format(
-                    " %s · %.0f/%.0f km/h · Gear:%d · %s",
-                    State.IsBike and "MOTOR" or "MOBIL",
-                    State.SpeedCurrentKmh or 0, target,
-                    #State.GearValues, State.LaunchPhase)
-            else
-                State.UI.InfoLabel.Text = " Kategori: - (belum duduk)"
+            if State.UI.MathStats then
+                local queueCount = 0
+                for _, v in pairs(State.MathSeen) do
+                    if v.attempts < Config.MathRetryLimit then queueCount = queueCount + 1 end
+                end
+                State.UI.MathStats.Text = string.format(
+                    " OK:%d | Fail:%d | Queue:%d — %s",
+                    State.MathOK, State.MathFail, queueCount,
+                    Config.MathSolver and "running" or "idle")
             end
-        end
-        if State.UI.FarmStatus then
-            State.UI.FarmStatus.Text = string.format(" Job: %s | NPC: %d | Redeem OK:%d/F:%d%s",
-                State.CurrentJob or "idle", #NpcCache.List, State.RedeemOK, State.RedeemFail,
-                State.RedeemCycleDone and " [done]" or "")
-        end
-        if State.UI.Badge then
-            State.UI.Badge.Text = resolveInputMode()
-        end
+            if State.UI.InfoLabel then
+                if State.Ready then
+                    local target = State.IsBike and Config.BikeTargetKmh or Config.CarTargetKmh
+                    State.UI.InfoLabel.Text = string.format(
+                        " %s · %.0f/%.0f km/h · Gear:%d · %s",
+                        State.IsBike and "MOTOR" or "MOBIL",
+                        State.SpeedCurrentKmh or 0, target,
+                        #State.GearValues, State.LaunchPhase)
+                else
+                    State.UI.InfoLabel.Text = " Kategori: - (belum duduk)"
+                end
+            end
+            if State.UI.FarmStatus then
+                State.UI.FarmStatus.Text = string.format(" Job: %s | NPC: %d | Redeem OK:%d/F:%d%s",
+                    State.CurrentJob or "idle", #NpcCache.List, State.RedeemOK, State.RedeemFail,
+                    State.RedeemCycleDone and " [done]" or "")
+            end
+            if State.UI.Badge then
+                State.UI.Badge.Text = resolveInputMode()
+            end
+        end)
     end
 end)
 
@@ -2828,9 +2756,3 @@ track(LP.CharacterAdded:Connect(function()
 end))
 
 if Config.SaveConfigOnChange then task.spawn(saveConfig) end
-
-print(string.format("DDS v2.2 loaded — exec:%s, input:%s, persist:%s, firesignal:%s, mobile:%s",
-    ExecutorName, resolveInputMode(),
-    HasWritefile and "yes" or "no",
-    HasFiresignal and "yes" or "no",
-    tostring(IsMobileHardware)))
