@@ -15,7 +15,61 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # ---------------------------------------------------------------------
+  # Cek dulu apakah GitHub Pages sudah diaktifkan di repo ini.
+  # Kalau belum, jangan gagal dengan error merah yang membingungkan —
+  # tulis ringkasan berisi langkah perbaikannya.
+  # ---------------------------------------------------------------------
+  preflight:
+    runs-on: ubuntu-latest
+    outputs:
+      sumber: ${{ steps.cek.outputs.sumber }}
+    steps:
+      - id: cek
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo
+            let sumber = 'belum'
+            try {
+              const { data } = await github.request('GET /repos/{owner}/{repo}/pages', { owner, repo })
+              sumber = data.build_type === 'workflow' ? 'workflow' : 'branch'
+              core.info(`Pages aktif. build_type = ${data.build_type}, url = ${data.html_url || '-'}`)
+            } catch (e) {
+              if (e.status !== 404) throw e
+              core.info('Pages belum diaktifkan (404).')
+            }
+            core.setOutput('sumber', sumber)
+
+            const s = core.summary
+            if (sumber === 'workflow') {
+              await s.addHeading('✅ Pages siap — build & deploy jalan', 2).write()
+            } else if (sumber === 'branch') {
+              await s
+                .addHeading('⚠️ Pages aktif tapi sumbernya "Deploy from a branch"', 2)
+                .addRaw(
+                  'Ubah ke **GitHub Actions** supaya workflow ini bisa deploy:\n\n' +
+                  '`Settings → Pages → Build and deployment → Source: GitHub Actions`'
+                )
+                .write()
+            } else {
+              await s
+                .addHeading('⚠️ GitHub Pages belum diaktifkan', 2)
+                .addRaw(
+                  'Aplikasinya sudah siap, tapi GitHub belum menyajikan apa pun di URL-nya ' +
+                  '— makanya dibuka malah **404**.\n\n' +
+                  '### Aktifkan (sekali saja, ±10 detik)\n' +
+                  '1. Buka **Settings → Pages** pada repo ini\n' +
+                  '2. Bagian **Build and deployment → Source**, pilih **GitHub Actions**\n' +
+                  '3. Balik ke tab **Actions**, jalankan ulang workflow ini\n\n' +
+                  'Setelah itu aplikasi live di: `https://' + owner + '.github.io/' + repo + '/`'
+                )
+                .write()
+            }
+
   build:
+    needs: preflight
+    if: needs.preflight.outputs.sumber == 'workflow'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -39,17 +93,15 @@ jobs:
         working-directory: app
         run: npm test
 
-      # enablement: true -> otomatis mengaktifkan GitHub Pages kalau belum aktif
       - uses: actions/configure-pages@v5
-        with:
-          enablement: true
 
       - uses: actions/upload-pages-artifact@v3
         with:
           path: app/dist
 
   deploy:
-    needs: build
+    needs: [preflight, build]
+    if: needs.preflight.outputs.sumber == 'workflow'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -57,3 +109,6 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Tampilkan URL
+        run: echo "🚀 Live di ${{ steps.deployment.outputs.page_url }}"
