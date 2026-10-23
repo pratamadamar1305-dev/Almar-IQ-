@@ -19,6 +19,9 @@ npx esbuild tests/smoke.test.tsx --bundle --platform=node --format=esm \
   --outfile=tests/.out/smoke.mjs --external:jsdom --jsx=automatic --log-level=error
 node tests/.out/smoke.mjs
 
+echo "▶ test ilustrasi gerakan (stick-man)"
+node tests/fig.test.mjs
+
 echo "▶ test service worker (offline/cache)"
 node tests/sw.test.mjs
 

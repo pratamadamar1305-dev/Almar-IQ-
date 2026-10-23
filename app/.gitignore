@@ -4,3 +4,7 @@ dist
 *.local
 tests/.out
 tsconfig.tsbuildinfo
+
+# output render & gambar eksperimen (dibuat ulang oleh tools/*.py)
+tools/out/
+tools/test/

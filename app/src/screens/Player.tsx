@@ -7,6 +7,7 @@ import { hitungStreak, isWajib, MILESTONES, namaMilestone } from '../lib/streak'
 import { getar, mintaWakeLock, sfx } from '../lib/audio'
 import type { Gerakan, QueueItem, SessionLog } from '../lib/types'
 import { Btn, Confetti, Modal, ProgressRing } from '../components/ui'
+import { GerakanFig, GerakanFigPanel } from '../components/GerakanFig'
 import { IcCheck, IcPause, IcPlay, IcRefresh, IcSkip, IcX } from '../components/Icon'
 
 type Phase = 'work' | 'rest'
@@ -488,6 +489,10 @@ export default function Player() {
               {ger.perSisi ? ' per kaki' : ''} · set {setNow} dari {ger.sets}
             </div>
 
+            <div className="player-fig">
+              <GerakanFigPanel id={ger.id} label={`Ilustrasi ${ger.nama}`} />
+            </div>
+
             <ProgressRing progress={durasi ? 1 - remaining / durasi : 1}>
               <div className="ring-time">{fmtWaktu(remaining)}</div>
               <div className="ring-sub">{running ? 'jalan' : 'pause'}</div>
@@ -508,6 +513,13 @@ export default function Player() {
 
             {showCara && (
               <div className="cara-panel" style={{ textAlign: 'left', width: '100%' }}>
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 10 }}>
+                  <GerakanFig id={ger.id} animate size={64} />
+                  <div style={{ fontSize: 11.5, color: 'var(--dim2)', lineHeight: 1.5 }}>
+                    Ilustrasi: posisi <b style={{ color: 'var(--orange2)' }}>awal</b> ↔{' '}
+                    <b style={{ color: 'var(--orange2)' }}>akhir</b> bergantian.
+                  </div>
+                </div>
                 <div>
                   <b>Cara:</b> {ger.cara}
                 </div>
