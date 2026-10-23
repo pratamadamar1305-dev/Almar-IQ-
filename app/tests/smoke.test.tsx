@@ -70,6 +70,19 @@ async function main() {
   ok('accordion kebuka (cara)', txt().includes('Posisi huruf V terbalik'))
   ok('kesalahan umum tampil', txt().includes('Jangan gini'))
 
+  // 3b. Ilustrasi stick-man
+  const thumbs = document.querySelectorAll('.ger-thumb svg.gfig')
+  ok('thumbnail ilustrasi semua gerakan', thumbs.length === 10)
+  const panel = document.querySelector('.ger-item.open .gfig-panel svg.gfig')
+  ok('panel ilustrasi di accordion', !!panel)
+  ok('panel punya gambar (line)', (panel?.querySelectorAll('line,circle').length ?? 0) > 8)
+  ok('panel punya animasi gerak', (panel?.innerHTML || '').includes('<animate'))
+  ok('ilustrasi tidak NaN', !(panel?.innerHTML || '').includes('NaN'))
+  ok('svg ilustrasi punya aria-label', (panel?.getAttribute('aria-label') || '').includes('Ilustrasi'))
+  const css = document.getElementById('fig-css')
+  ok('css ilustrasi disuntik sekali', !!css && (css.textContent || '').includes('.gfig'))
+  ok('css ilustrasi tidak dobel', document.querySelectorAll('#fig-css').length === 1)
+
   // 4. Mulai sesi -> gate izin ortu dulu
   await click(byText('Mulai Sesi Ini'), 'Mulai Sesi Ini')
   ok('modal izin muncul saat mulai', txt().includes('Sebelum mulai'))
@@ -79,6 +92,8 @@ async function main() {
   ok('player kebuka setelah izin', txt().includes('Set Selesai'))
   ok('nama gerakan di player', txt().includes('Pike Push-Up'))
   ok('timer tampil', /\d{2}:\d{2}/.test(txt()))
+  ok('ilustrasi tampil di player', !!document.querySelector('.player-fig svg.gfig'))
+  ok('ilustrasi player beranimasi', (document.querySelector('.player-fig')?.innerHTML || '').includes('<animate'))
 
   // 5. Selesaikan set 1 -> rest
   await click(byText('Set Selesai'), 'Set Selesai')

@@ -6,6 +6,7 @@ import { toKey } from '../lib/utils'
 import type { Alat, DayId } from '../lib/types'
 import { mintaIzin } from '../lib/izin'
 import { Btn } from '../components/ui'
+import { GerakanFig, GerakanFigPanel } from '../components/GerakanFig'
 import { IcBack, IcChevron, IcPlay, IcShield, IcTimer } from '../components/Icon'
 
 const ALAT_ICON: Record<Alat, string> = {
@@ -128,7 +129,10 @@ export default function Detail({ day }: { day: DayId }) {
               return (
                 <div key={key} className={`ger-item ${isOpen ? 'open' : ''}`}>
                   <button className="ger-head" onClick={() => setOpen(isOpen ? null : key)}>
-                    <span className="ger-num">{gi + 1}</span>
+                    <span className="ger-thumb">
+                      <GerakanFig id={ger.id} size={42} />
+                      <span className="ger-thumb-badge">{gi + 1}</span>
+                    </span>
                     <span className="ger-main">
                       <span className="ger-nama">{ger.nama}</span>
                       <span className="ger-sub">
@@ -141,6 +145,9 @@ export default function Detail({ day }: { day: DayId }) {
                   </button>
                   {isOpen && (
                     <div className="ger-body">
+                      <div className="ger-fig-wrap">
+                        <GerakanFigPanel id={ger.id} label={`Ilustrasi ${ger.nama}`} />
+                      </div>
                       <div className="ger-text">
                         <b>Cara:</b> {ger.cara}
                       </div>
