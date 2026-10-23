@@ -1,6 +1,6 @@
--- Drag Drive Simulator — v2.5 (Stealth + Audit Patch)
--- Fixes: removed print hook, marker-based GUI cleanup, HUD ExecutorName removed,
---        pcall status loop, LastMath race, silent (no output at all)
+-- Drag Drive Simulator — v2.6 (Final Build)
+-- Fix: UI toggle (FAB hides when panel open, X button shows FAB, hotkey syncs)
+-- Stealth: No print/warn, no firesignal, marker-based GUI cleanup
 -- Target: Roblox (Delta PC + Delta Mobile / Arceus / Krnl / Wave / Xeno)
 
 if _G.DDS_Connections then
@@ -25,20 +25,11 @@ local PlayerGui = LP:WaitForChild("PlayerGui")
 
 local function track(c) table.insert(_G.DDS_Connections, c); return c end
 
--- ============================================================
--- GUI CLEANUP (marker-based, safe)
--- ============================================================
 do
-    -- Destroy by reference first (fastest, safest)
-    if _G.DDS_Gui and _G.DDS_Gui.Parent then
-        pcall(function() _G.DDS_Gui:Destroy() end)
-    end
-    if _G.DDS_Hud and _G.DDS_Hud.Parent then
-        pcall(function() _G.DDS_Hud:Destroy() end)
-    end
+    if _G.DDS_Gui and _G.DDS_Gui.Parent then pcall(function() _G.DDS_Gui:Destroy() end) end
+    if _G.DDS_Hud and _G.DDS_Hud.Parent then pcall(function() _G.DDS_Hud:Destroy() end) end
     _G.DDS_Gui = nil
     _G.DDS_Hud = nil
-    -- Marker-based sweep across both hosts
     for _, host in ipairs({CoreGui, PlayerGui}) do
         if host then
             for _, old in ipairs(host:GetChildren()) do
@@ -54,15 +45,9 @@ do
     end
 end
 
--- ============================================================
--- EXECUTOR (internal use only, NOT displayed)
--- ============================================================
 local HasWritefile = (type(writefile) == "function" and type(readfile) == "function")
 local IsMobileHardware = UserInput.TouchEnabled and not UserInput.KeyboardEnabled
 
--- ============================================================
--- CONFIG
--- ============================================================
 local Config = {
     InputMode = "Auto",
     HumanizeInput = true,
@@ -108,9 +93,6 @@ local Config = {
 }
 local ConfigDefaults = table.clone(Config)
 
--- ============================================================
--- CONFIG PERSISTENCE
--- ============================================================
 local CONFIG_PATH = ".cache_settings.json"
 
 local function saveConfig()
@@ -162,9 +144,6 @@ local function requestSave()
     task.spawn(saveConfig)
 end
 
--- ============================================================
--- STATE
--- ============================================================
 local State = {
     Vehicle = nil, VehicleRoot = nil, IsBike = false, VehicleName = "",
     RpmValue = nil, RpmMax = 8000, Ready = false,
@@ -574,7 +553,6 @@ task.spawn(function()
             State.ManualClutchOn = false
             State.LastSpeedMethod = Config.SpeedMethod
             table.clear(State.PromptCache)
-            LogRing("vehicle -> " .. (v and v.Name or "nil"))
         end
     end
 end)
@@ -1219,9 +1197,6 @@ task.spawn(function()
     end
 end)
 
--- ============================================================
--- MATH ENGINE
--- ============================================================
 local SYMBOL_OPS = {
     ["×"] = "*", ["÷"] = "/",
     ["−"] = "-", ["–"] = "-", ["—"] = "-",
@@ -1649,9 +1624,6 @@ watchdog("redeem", function()
     State.RedeemBusy = false
 end, 0.5)
 
--- ============================================================
--- UI HOST
--- ============================================================
 local GuiHost = nil
 do
     local ok = pcall(function()
@@ -1697,9 +1669,6 @@ local function makeGradient(p, c1, c2)
     local g = Instance.new("UIGradient"); g.Color = ColorSequence.new(c1, c2); g.Rotation = 90; g.Parent = p; return g
 end
 
--- ============================================================
--- TELEPORT + DEEP SCAN
--- ============================================================
 local Teleport = { ScanCache = {}, LastScan = 0, Cooldown = 2.0, Busy = false }
 local LandmarkCache = { t = 0, map = {} }
 
@@ -2256,6 +2225,7 @@ local function buildUI()
     if not sg.Parent then return end
     task.wait(0.1)
     State.UI.Gui = sg
+    State.UI.Fab = nil
     _G.DDS_Gui = sg
 
     local fab = Instance.new("TextButton")
@@ -2264,16 +2234,17 @@ local function buildUI()
     fab.BackgroundColor3 = THEME.accentDim; fab.BorderSizePixel = 0
     fab.Text = "⚙"; fab.TextColor3 = Color3.fromRGB(255, 255, 255)
     fab.Font = Enum.Font.GothamBold; fab.TextSize = 22; fab.ZIndex = 10
-    fab.Visible = true; fab.Parent = sg
+    fab.Visible = false; fab.Parent = sg
     makeCorner(fab, 28); makeStroke(fab, THEME.accent, 2, 0.3)
     makeGradient(fab, THEME.accentDim, THEME.accent)
+    State.UI.Fab = fab
 
     local main = Instance.new("Frame")
     main.Name = "Cfg_MainPanel"
     main.AnchorPoint = Vector2.new(0, 0.5); main.Position = UDim2.new(0, 15, 0.5, 0)
     main.BackgroundColor3 = THEME.bg; main.BackgroundTransparency = 0.05
     main.BorderSizePixel = 0; main.Active = true; main.Draggable = true
-    main.ZIndex = 1; main.Visible = false; main.Parent = sg
+    main.ZIndex = 1; main.Visible = true; main.Parent = sg
     makeCorner(main, 14); makeStroke(main, THEME.stroke, 1.5, 0.4)
     makeGradient(main, Color3.fromRGB(22, 24, 32), Color3.fromRGB(14, 16, 22))
     State.UI.MainPanel = main
@@ -2281,7 +2252,7 @@ local function buildUI()
     local shadow = Instance.new("Frame")
     shadow.Name = "Cfg_Shadow"; shadow.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
     shadow.BackgroundTransparency = 0.6; shadow.BorderSizePixel = 0
-    shadow.ZIndex = 0; shadow.Visible = false; shadow.Parent = sg
+    shadow.ZIndex = 0; shadow.Visible = true; shadow.Parent = sg
     shadow.AnchorPoint = Vector2.new(0, 0.5); makeCorner(shadow, 16)
     State.UI.Shadow = shadow
 
@@ -2334,7 +2305,9 @@ local function buildUI()
     closeBtn.Font = Enum.Font.GothamBold; closeBtn.TextSize = 16; closeBtn.Parent = header
     makeCorner(closeBtn, 6)
     track(closeBtn.MouseButton1Click:Connect(function()
-        main.Visible = not main.Visible; shadow.Visible = main.Visible
+        main.Visible = false
+        shadow.Visible = false
+        fab.Visible = true
     end))
 
     local contentArea = Instance.new("Frame")
@@ -2581,9 +2554,11 @@ local function buildUI()
     selectTab("FARM")
     main.Visible = true
     shadow.Visible = true
+    fab.Visible = false
     track(fab.MouseButton1Click:Connect(function()
-        main.Visible = not main.Visible
-        shadow.Visible = main.Visible
+        main.Visible = true
+        shadow.Visible = true
+        fab.Visible = false
     end))
 end
 
@@ -2595,17 +2570,17 @@ if UserInput.KeyboardEnabled then
         if input.KeyCode == Config.HotkeyToggle then
             local mp = State.UI.MainPanel
             local sh = State.UI.Shadow
+            local fb = State.UI.Fab
             if mp then
-                mp.Visible = not mp.Visible
-                if sh then sh.Visible = mp.Visible end
+                local newState = not mp.Visible
+                mp.Visible = newState
+                if sh then sh.Visible = newState end
+                if fb then fb.Visible = not newState end
             end
         end
     end))
 end
 
--- ============================================================
--- HUD (no ExecutorName — reduces string-scan risk)
--- ============================================================
 do
     local hudSg = Instance.new("ScreenGui")
     hudSg.Name = "UserPrefs_HUD"; hudSg.ResetOnSpawn = false
@@ -2664,9 +2639,6 @@ do
     end)
 end
 
--- ============================================================
--- SYNC OFFICE -> MATH
--- ============================================================
 local function syncOfficeMath()
     if not Config.OfficeMathLinked then return end
     local officeActive = Config.AutoOffice or Config.FarmQueueMode
@@ -2698,9 +2670,6 @@ local function syncOfficeMath()
 end
 task.spawn(function() while task.wait(1.0) do pcall(syncOfficeMath) end end)
 
--- ============================================================
--- STATUS LOOP (pcall-wrapped)
--- ============================================================
 task.spawn(function()
     while task.wait(0.5) do
         pcall(function()
