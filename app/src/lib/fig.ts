@@ -107,6 +107,30 @@ function circle(
   return `<circle cx="${r1(a1[0])}" cy="${r1(a1[1])}" r="${rad}" class="${cls}">${inner}</circle>`
 }
 
+function bodyTransform(p: Pose): string {
+  const dx = p.p[0] - p.n[0]
+  const dy = p.p[1] - p.n[1]
+  const angle = r1((Math.atan2(dy, dx) * 180) / Math.PI - 90)
+  return `translate(${r1(p.n[0])} ${r1(p.n[1])}) rotate(${angle})`
+}
+
+/** Baju silat sederhana yang mengikuti arah badan pada semua pose. */
+function uniform(a: Pose, b: Pose, dur?: string): string {
+  const transform = bodyTransform(a)
+  const motion = dur
+    ? `<animate attributeName="transform" values="${transform};${bodyTransform(b)};${bodyTransform(b)};${transform}" keyTimes="0;0.45;0.55;1" dur="${dur}" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.6 1;0 0 1 1;0.4 0 0.6 1"/>`
+    : ''
+  return `<g class="fig-uniform" transform="${transform}">${motion}<path class="fig-shirt" d="M-5.8 1 Q0 -1.5 5.8 1 L4.8 22 L4.2 26 Q0 30 -4.2 26 L-4.8 22Z"/><path class="fig-shorts" d="M-4.8 21 L4.8 21 L5 29 Q0 33 -5 29Z"/><path class="fig-belt" d="M-4.9 21.5 L4.9 21.5"/></g>`
+}
+
+function head(p: Pose, q: Pose, dur?: string): string {
+  const transform = (pt: Pt) => `translate(${r1(pt[0])} ${r1(pt[1])})`
+  const motion = dur
+    ? `<animate attributeName="transform" values="${transform(p.h)};${transform(q.h)};${transform(q.h)};${transform(p.h)}" keyTimes="0;0.45;0.55;1" dur="${dur}" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.6 1;0 0 1 1;0.4 0 0.6 1"/>`
+    : ''
+  return `<g class="fig-head-g" transform="${transform(p.h)}">${motion}<circle r="7.4" class="fig-head"/><path d="M-6.4 -2 Q-5.6 -8 0 -7.5 Q5.6 -8 6.4 -2 Q3.6 -4.3 0 -3.2 Q-3.6 -4.3 -6.4 -2Z" class="fig-hair"/><circle cx="-2.3" cy="0.6" r="0.7" class="fig-eye"/><circle cx="2.3" cy="0.6" r="0.7" class="fig-eye"/><path d="M-1.5 3.2 Q0 4.2 1.5 3.2" class="fig-smile"/></g>`
+}
+
 /* ------------------------------------------------------------------ */
 /*  Props                                                             */
 /* ------------------------------------------------------------------ */
@@ -212,20 +236,18 @@ export function poseFig(a: Pose, b?: Pose): string {
   for (const k of ['k', 'a', 'e', 'w'] as NodeKey[]) {
     if (!has(a, k) && !has(B, k)) continue
     const rad = k === 'w' && (a.grip === 'open' || B.grip === 'open') ? 3.4 : k === 'w' ? 2.6 : 2.3
-    joints.push(circle(at(a, B, k), at(B, a, k), rad, '', dur))
+    joints.push(circle(at(a, B, k), at(B, a, k), rad, k === 'w' ? 'fig-hand' : '', dur))
   }
 
   const farJoints: string[] = []
   for (const k of ['k2', 'e2'] as NodeKey[]) {
     if (!has(a, k) && !has(B, k)) continue
-    farJoints.push(circle(at(a, B, k), at(B, a, k), 2.1, 'fig-far-f', dur))
+    farJoints.push(circle(at(a, B, k), at(B, a, k), 2.1, k === 'e2' ? 'fig-far-f' : 'fig-hand', dur))
   }
 
-  const head = `<circle cx="${r1(a.h[0])}" cy="${r1(a.h[1])}" r="9" class="fig-head">${
-    dur ? anim('cx', a.h[0], B.h[0], dur) + anim('cy', a.h[1], B.h[1], dur) : ''
-  }</circle>`
-
-  const torso = line(a.p, a.n, B.p, B.n, TW.torso, dur)
+  const neck = line(a.h, a.n, B.h, B.n, 3.2, dur)
+  const body = uniform(a, B, dur)
+  const face = head(a, B, dur)
   const bar = a.br ? sapu(a.br, B.br ?? a.br, dur) : ''
   const bag = a.tas ? tas(a.tas, B.tas ?? a.tas, dur) : ''
 
@@ -233,7 +255,7 @@ export function poseFig(a: Pose, b?: Pose): string {
     `<g class="fig-bg">${scenery(a)}</g>`,
     `<g class="fig-far" stroke-linecap="round" stroke-linejoin="round">${far.join('')}${farJoints.join('')}</g>`,
     a.brBehind ? bar : '',
-    `<g class="fig-near" stroke-linecap="round" stroke-linejoin="round">${torso}${nearCore.join('')}${joints.join('')}${head}</g>`,
+    `<g class="fig-near" stroke-linecap="round" stroke-linejoin="round">${body}<g class="fig-neck">${neck}</g>${nearCore.join('')}${joints.join('')}${face}</g>`,
     a.brBehind ? '' : bar,
     bag,
     a.mv ? `<g class="fig-mv">${arrow(a.mv)}</g>` : '',
@@ -275,10 +297,21 @@ export const FIG_CSS = `
 .gfig .fig-bg .fig-door-knob{fill:var(--fig-line);stroke:none}
 .gfig .fig-bg .fig-chair{fill:none;stroke:var(--fig-line);stroke-width:3}
 .gfig .fig-near{fill:none;stroke:var(--fig-ink);stroke-linecap:round;stroke-linejoin:round}
-.gfig .fig-near .fig-head{fill:var(--fig-ink);stroke:none}
+.gfig .fig-uniform{stroke:none}
+.gfig .fig-shirt{fill:var(--fig-shirt);stroke:var(--fig-shirt-edge);stroke-width:1.2;stroke-linejoin:round}
+.gfig .fig-shorts{fill:var(--fig-shorts);stroke:var(--fig-shirt-edge);stroke-width:1.1;stroke-linejoin:round}
+.gfig .fig-belt{fill:none;stroke:var(--fig-accent);stroke-width:2.2;stroke-linecap:round}
+.gfig .fig-neck{stroke:var(--fig-skin);stroke-width:3.6}
+.gfig .fig-near .fig-head{fill:var(--fig-skin);stroke:var(--fig-head-edge);stroke-width:1.2}
+.gfig .fig-head-g{stroke:none}
+.gfig .fig-head-g .fig-hair{fill:var(--fig-hair)}
+.gfig .fig-head-g .fig-eye{fill:var(--fig-hair)}
+.gfig .fig-head-g .fig-smile{fill:none;stroke:var(--fig-hair);stroke-width:.7;stroke-linecap:round}
 .gfig .fig-near circle{fill:var(--fig-ink);stroke:none}
+.gfig .fig-near .fig-hand{fill:var(--fig-skin);stroke:var(--fig-head-edge);stroke-width:.8}
 .gfig .fig-far{fill:none;stroke:var(--fig-far);stroke-linecap:round;stroke-linejoin:round}
-.gfig .fig-far circle{fill:var(--fig-far);stroke:none}
+.gfig .fig-far .fig-far-f{fill:var(--fig-far);stroke:none}
+.gfig .fig-far .fig-hand{fill:var(--fig-skin);stroke:var(--fig-head-edge);stroke-width:.7}
 .gfig .fig-prop{stroke:var(--fig-accent);stroke-linecap:round;fill:none}
 .gfig .fig-prop-b{stroke:var(--fig-accent);stroke-linecap:round;fill:none;opacity:.85}
 .gfig .fig-prop-f{fill:var(--fig-accent);stroke:none}

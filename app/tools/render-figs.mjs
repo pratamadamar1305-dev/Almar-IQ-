@@ -25,6 +25,12 @@ const { Resvg } = await import('@resvg/resvg-js')
 const DARK = {
   '--fig-ink': '#eef3fb',
   '--fig-far': '#6b7789',
+  '--fig-shirt': '#35c9b7',
+  '--fig-shirt-edge': '#147e78',
+  '--fig-shorts': '#30435c',
+  '--fig-skin': '#f3bd91',
+  '--fig-head-edge': '#965c43',
+  '--fig-hair': '#263244',
   '--orange': '#ff6b1a',
   '--amber': '#ffc542',
   '--line': '#232b3a',
@@ -32,6 +38,12 @@ const DARK = {
 const LIGHT = {
   '--fig-ink': '#1a2233',
   '--fig-far': '#9aa6b8',
+  '--fig-shirt': '#10ae9d',
+  '--fig-shirt-edge': '#08786e',
+  '--fig-shorts': '#cbdce9',
+  '--fig-skin': '#f5c49e',
+  '--fig-head-edge': '#a9684b',
+  '--fig-hair': '#334155',
   '--orange': '#f2610f',
   '--amber': '#e0a01c',
   '--line': '#dbe2ee',
@@ -53,10 +65,20 @@ const STYLE = fig.FIG_CSS + `
 .fig-bg .fig-door-knob{fill:var(--line)}
 .fig-bg .fig-chair{fill:none;stroke:var(--line);stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
 .fig-near{fill:none;stroke:var(--fig-ink);stroke-linecap:round;stroke-linejoin:round}
-.fig-near .fig-head{fill:var(--fig-ink);stroke:none}
+.fig-head{fill:var(--fig-skin);stroke:var(--fig-head-edge);stroke-width:1.2}
+.fig-head-g{stroke:none}
+.fig-head-g .fig-hair,.fig-head-g .fig-eye{fill:var(--fig-hair)}
+.fig-head-g .fig-smile{fill:none;stroke:var(--fig-hair);stroke-width:.7}
+.fig-uniform{stroke:none}
+.fig-shirt{fill:var(--fig-shirt);stroke:var(--fig-shirt-edge);stroke-width:1.2}
+.fig-shorts{fill:var(--fig-shorts);stroke:var(--fig-shirt-edge);stroke-width:1.1}
+.fig-belt{fill:none;stroke:var(--amber);stroke-width:2.2}
+.fig-neck{stroke:var(--fig-skin);stroke-width:3.6}
 .fig-near circle{fill:var(--fig-ink);stroke:none}
+.fig-near .fig-hand{fill:var(--fig-skin);stroke:var(--fig-head-edge);stroke-width:.8}
 .fig-far{fill:none;stroke:var(--fig-far);stroke-linecap:round;stroke-linejoin:round;opacity:.85}
-.fig-far circle{fill:var(--fig-far);stroke:none}
+.fig-far .fig-hand{fill:var(--fig-skin);stroke:var(--fig-head-edge);stroke-width:.7}
+.fig-far .fig-far-f{fill:var(--fig-far);stroke:none}
 .fig-prop{stroke:var(--amber);stroke-linecap:round}
 .fig-prop-b{stroke:var(--amber);stroke-linecap:round;opacity:.85}
 .fig-prop-f{fill:var(--amber);stroke:none}
