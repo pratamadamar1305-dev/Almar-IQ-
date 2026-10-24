@@ -1,4 +1,5 @@
--- Drag Drive Simulator — v3.1 (Auto Shift Mobile Bypass + ESP Fix)
+-- Drag Drive Simulator — v3.2 (Zero-Touch Conflict Fix)
+-- Fix: No synthetic clicks while driving. Pure KeyCode inputs. Background tasks pause in vehicle.
 -- Target: Roblox (Delta PC + Delta Mobile / Arceus / Krnl / Wave / Xeno)
 
 if _G.DDS_Connections then
@@ -261,7 +262,6 @@ local function findGuiByKeywords(keywords)
     local sorted = table.clone(keywords)
     table.sort(sorted, function(a, b) return #a > #b end)
     for _, g in ipairs(PlayerGui:GetDescendants()) do
-        -- Dukung ImageButton untuk kontrol HP
         if (g:IsA("TextButton") or g:IsA("ImageButton")) and isAncestorChainVisible(g) then
             for _, k in ipairs(sorted) do
                 if matchesKeyword(g.Name, k) or matchesKeyword(safeText(g), k) then
@@ -401,80 +401,35 @@ local function releaseAllInput()
     for _, k in ipairs(keys) do mobileHoldEnd(k) end
 end
 
+-- ============================================================
+-- ACTION LAYER (ZERO TOUCH CONFLICT)
+-- ============================================================
 local function actionAccelerate(hold)
-    if resolveInputMode() == "Keyboard" then
-        if hold then tapKey(Enum.KeyCode.W, hold)
-        else setKeyHeld(Enum.KeyCode.W, true) end
-    else
-        local btn = findGuiByKeywords({"gas","throttle","accelerate","injak","maju"})
-        if btn then
-            if hold then fireClick(btn, hold)
-            else mobileHoldStart("gas", btn) end
-        end
-    end
+    if hold then tapKey(Enum.KeyCode.W, hold)
+    else setKeyHeld(Enum.KeyCode.W, true) end
 end
 
 local function actionReleaseAccelerate()
-    if resolveInputMode() == "Keyboard" then
-        setKeyHeld(Enum.KeyCode.W, false)
-    else
-        mobileHoldEnd("gas")
-    end
+    setKeyHeld(Enum.KeyCode.W, false)
 end
 
--- FIX AUTOSHIFT MOBILE: Pake virtual key 'E' + ImageButton keyword
 local function actionShiftUp()
-    if resolveInputMode() == "Keyboard" then
-        tapKey(Enum.KeyCode.E, 0.06)
-    else
-        -- 1. Tembak keyboard E (Delta Mobile support ini)
-        tapKey(Enum.KeyCode.E, 0.06)
-        
-        -- 2. Fallback klik UI (tahan 0.2s biar kebaca)
-        local btn = findGuiByKeywords({"shift up","gear up","naik","gigi","shift","gear","panah kanan","right arrow","up"})
-        if btn then fireClick(btn, 0.2) end
-    end
+    tapKey(Enum.KeyCode.E, 0.08) -- 100% keyboard virtual, no UI click
 end
 
 local function actionShiftDown()
-    if resolveInputMode() == "Keyboard" then
-        tapKey(Enum.KeyCode.Q, 0.06)
-    else
-        tapKey(Enum.KeyCode.Q, 0.06)
-        local btn = findGuiByKeywords({"shift down","gear down","turun","down","panah kiri","left arrow"})
-        if btn then fireClick(btn, 0.2) end
-    end
+    tapKey(Enum.KeyCode.Q, 0.08)
 end
 
 local function actionEnableManualClutch()
     if State.ManualClutchOn then return true end
-    if resolveInputMode() == "Keyboard" then
-        tapKey(Enum.KeyCode.M, 0.04)
-        State.ManualClutchOn = true
-        return true
-    else
-        local btn = findGuiByKeywords({"clutch mode","manual clutch","clutch toggle","mode clutch"})
-        if btn then
-            fireClick(btn, 0.1)
-            State.ManualClutchOn = true
-            return true
-        end
-        State.ManualClutchOn = true
-        return false
-    end
+    tapKey(Enum.KeyCode.M, 0.06)
+    State.ManualClutchOn = true
+    return true
 end
 
 local function actionClutchHold(held)
-    if resolveInputMode() == "Keyboard" then
-        setKeyHeld(Enum.KeyCode.LeftShift, held)
-    else
-        if held then
-            local btn = findGuiByKeywords({"clutch hold","clutch","kopling"})
-            if btn then mobileHoldStart("clutch", btn) end
-        else
-            mobileHoldEnd("clutch")
-        end
-    end
+    setKeyHeld(Enum.KeyCode.LeftShift, held)
 end
 
 local function actionNeutral()
@@ -486,16 +441,7 @@ local function actionTopGear()
 end
 
 local function actionWheelieHold(held)
-    if resolveInputMode() == "Keyboard" then
-        setKeyHeld(Enum.KeyCode.T, held)
-    else
-        if held then
-            local btn = findGuiByKeywords({"wheelie","angkat","stunt","trick","lean"})
-            if btn then mobileHoldStart("wheelie", btn) end
-        else
-            mobileHoldEnd("wheelie")
-        end
-    end
+    setKeyHeld(Enum.KeyCode.T, held)
 end
 
 local BIKE_HINTS = {"bike","motor","moto","r1","r6","cbr","ninja","gsxr","ducati","harley","scooter","vixion","beat","nmax","pcx","aerox","vario","satria","sonic"}
@@ -710,7 +656,7 @@ end))
 track(RunService.Heartbeat:Connect(function()
     if not Config.AutoShift or not State.Ready then return end
     if State.LaunchPhase ~= "idle" then return end
-    if os.clock() - State.LastGearShift < 1.0 then return end -- Cooldown 1 detik
+    if os.clock() - State.LastGearShift < 1.0 then return end
     
     local rpm, max = getRPM()
     local ratio = max > 0 and rpm / max or 0
@@ -732,7 +678,6 @@ track(RunService.Heartbeat:Connect(function()
             State.LastGearShift = os.clock()
             State.LastAutoShiftSpeed = currentSpeed
         elseif currentSpeed < State.LastAutoShiftSpeed then
-            -- Reset patokan kalau motor melambat
             State.LastAutoShiftSpeed = currentSpeed
         end
     end
@@ -1229,6 +1174,7 @@ local function teleportAndInteract(target)
 end
 
 local function farmTick()
+    if State.Ready then return end -- Jangan farm kalau lagi di kendaraan
     local jobsToScan = {}
     if Config.FarmQueueMode then
         jobsToScan = {"office", "barista", "courier"}
@@ -1572,6 +1518,7 @@ end
 
 local function mathTick()
     if not Config.MathSolver then return end
+    if State.Ready then return end -- Jangan click kalau di kendaraan
     if os.clock() - State.LastMath < Config.MathInterval then return end
     if State.MathBusy then return end
     State.LastMath = os.clock()
@@ -1633,6 +1580,7 @@ end)
 
 local function upgradeTick()
     if not Config.AutoUpgrade then return end
+    if State.Ready then return end
     if os.clock() - State.LastUpgrade < Config.UpgradeCheck then return end
     State.LastUpgrade = os.clock()
     if State.UpgradeBusy then return end
@@ -1669,6 +1617,7 @@ task.spawn(function()
 end)
 
 local function redeemOne()
+    if State.Ready then return end
     if State.RedeemCycleDone then return end
     if State.RedeemIndex > #Config.RedeemCodes then
         State.RedeemCycleDone = true
@@ -2542,7 +2491,7 @@ local function buildUI()
             Workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
             State.CameraLockedByUs = false
         end
-        refreshESPAll() -- Biar mati total
+        refreshESPAll()
         teardownLinearVelocity()
         State.CachedInputMode = nil
         State.ManualClutchOn = false
@@ -2800,7 +2749,7 @@ end)
 
 track(LP.CharacterAdded:Connect(function()
     releaseAllInput()
-    refreshESPAll() -- Jangan destroy, cukup hide
+    refreshESPAll()
     teardownLinearVelocity()
     State.LaunchPhase = "idle"
     State.ManualClutchOn = false
