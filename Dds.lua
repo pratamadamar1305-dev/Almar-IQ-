@@ -1,5 +1,5 @@
--- Drag Drive Simulator — v2.9 (Auto Shift Fix)
--- Fix: AutoShift Hybrid (RPM + Speed fallback), Longer mobile tap, Wider keywords.
+-- Drag Drive Simulator — v3.0 (ESP Pooling & AutoShift Fix)
+-- Fix: Highlight pooling (no invisible bug), Mobile tap 0.15s, Speed fallback shift.
 -- Target: Roblox (Delta PC + Delta Mobile / Arceus / Krnl / Wave / Xeno)
 
 if _G.DDS_Connections then
@@ -422,13 +422,12 @@ local function actionReleaseAccelerate()
     end
 end
 
--- FIX AUTOSHIFT: Tombol Shift Up lebih general keywordnya & klik lebih lama di Mobile
 local function actionShiftUp()
     if resolveInputMode() == "Keyboard" then
         tapKey(Enum.KeyCode.E, 0.04)
     else
-        local btn = findGuiByKeywords({"shift up","gear up","naik","gigi","shift","gear"})
-        if btn then fireClick(btn, 0.1) end -- Naik dari 0.03 ke 0.1 biar mobile detect
+        local btn = findGuiByKeywords({"shift up","gear up","naik","gigi","shift","gear","arrow"})
+        if btn then fireClick(btn, 0.15) end -- 0.15s biar HP aman
     end
 end
 
@@ -437,7 +436,7 @@ local function actionShiftDown()
         tapKey(Enum.KeyCode.Q, 0.04)
     else
         local btn = findGuiByKeywords({"shift down","gear down","turun","down"})
-        if btn then fireClick(btn, 0.1) end
+        if btn then fireClick(btn, 0.15) end
     end
 end
 
@@ -705,28 +704,27 @@ end))
 track(RunService.Heartbeat:Connect(function()
     if not Config.AutoShift or not State.Ready then return end
     if State.LaunchPhase ~= "idle" then return end
-    if os.clock() - State.LastGearShift < 0.8 then return end -- Cooldown lebih aman buat mobile
+    if os.clock() - State.LastGearShift < 0.8 then return end
     
     local rpm, max = getRPM()
     local ratio = max > 0 and rpm / max or 0
     
-    -- Metode 1: Shift berdasarkan RPM (Kalau mobil support)
+    -- Metode 1: RPM
     if ratio >= Config.ShiftPoint and ratio > 0 then
         actionShiftUp()
         State.LastGearShift = os.clock()
         return
     end
     
-    -- Metode 2: Fallback berdasarkan Kecepatan (Kalau RPM nggak kebaca / 0)
-    -- Kalau kecepatan naik 20 km/h dan gas lagi diinjek, naikin gigi
+    -- Metode 2: Kecepatan (Fallback)
     if State.VehicleRoot and State.VehicleRoot.Parent then
         local currentSpeed = State.VehicleRoot.AssemblyLinearVelocity.Magnitude * Config.StudsToKmh
-        if currentSpeed > 10 and (currentSpeed - State.LastAutoShiftSpeed) >= 20 then
+        -- Pindah gigi tiap naik 15 km/h dari gigi terakhir
+        if currentSpeed > 15 and (currentSpeed - State.LastAutoShiftSpeed) >= 15 then
             actionShiftUp()
             State.LastGearShift = os.clock()
             State.LastAutoShiftSpeed = currentSpeed
         elseif currentSpeed < State.LastAutoShiftSpeed then
-            -- Reset saat melambat
             State.LastAutoShiftSpeed = currentSpeed
         end
     end
@@ -859,36 +857,11 @@ track(RunService.RenderStepped:Connect(function()
 end))
 
 -- ============================================================
--- ESP (Highlight Fix v2.8)
+-- ESP (Pooling Fix - Anti Invisible)
 -- ============================================================
-local function safeDestroy(obj)
-    if not obj or not obj.Parent then return end
-    pcall(function()
-        if obj:IsA("Highlight") then
-            obj.Enabled = false
-            obj.Adornee = nil
-        end
-        obj:Destroy()
-    end)
-end
-
-local function clearESP()
-    for _, o in pairs(State.ESPObjects) do 
-        safeDestroy(o)
-    end
-    table.clear(State.ESPObjects)
-end
-
-local function addESP(plr)
-    if plr == LP or not Config.ESP then return end
-    local char = plr.Character
+local function toggleESPInstance(plr, char)
     if not char or not char.Parent then return end
     local hum = char:FindFirstChildOfClass("Humanoid")
-    
-    safeDestroy(State.ESPObjects[plr])
-    safeDestroy(State.ESPObjects["name_" .. plr.Name])
-    State.ESPObjects[plr] = nil
-    State.ESPObjects["name_" .. plr.Name] = nil
     
     local target = char
     local targetParent = char
@@ -900,21 +873,24 @@ local function addESP(plr)
 
     if not target or not target.Parent then return end
 
-    local hl = Instance.new("Highlight")
-    hl.Name = "ESP_HL_" .. plr.Name
-    hl.Adornee = target
-    hl.FillColor = Config.ESPColor
-    hl.OutlineColor = Config.ESPColor
-    hl.FillTransparency = 0.7
-    hl.OutlineTransparency = 0
-    hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-    hl.Parent = targetParent
-    State.ESPObjects[plr] = hl
+    local hl = State.ESPObjects[plr]
+    local bb = State.ESPObjects["name_" .. plr.Name]
 
-    if Config.ESPNames or Config.ESPHealth or Config.ESPDistance then
-        local bb = Instance.new("BillboardGui")
+    -- Kalau belum ada, bikin baru (sekali aja)
+    if not hl then
+        hl = Instance.new("Highlight")
+        hl.Name = "ESP_HL_" .. plr.Name
+        hl.FillColor = Config.ESPColor
+        hl.OutlineColor = Config.ESPColor
+        hl.FillTransparency = 0.7
+        hl.OutlineTransparency = 0
+        hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        State.ESPObjects[plr] = hl
+    end
+
+    if not bb then
+        bb = Instance.new("BillboardGui")
         bb.Name = "B" .. plr.Name
-        bb.Adornee = target 
         bb.AlwaysOnTop = true
         bb.Size = UDim2.new(0, 160, 0, 46)
         bb.StudsOffset = Vector3.new(0, 3, 0) 
@@ -925,14 +901,13 @@ local function addESP(plr)
         nameLbl.BackgroundTransparency = 1
         nameLbl.TextColor3 = Config.ESPColor; nameLbl.Font = Enum.Font.GothamBold
         nameLbl.TextSize = 12; nameLbl.TextStrokeTransparency = 0.4
-        nameLbl.Text = plr.Name; nameLbl.Visible = Config.ESPNames
-        nameLbl.Parent = bb
+        nameLbl.Text = plr.Name; nameLbl.Parent = bb
 
         local hb = Instance.new("Frame")
         hb.Name = "H"
         hb.Size = UDim2.new(0.8, 0, 0, 4); hb.Position = UDim2.new(0.1, 0, 0, 20)
         hb.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-        hb.BorderSizePixel = 0; hb.Visible = Config.ESPHealth; hb.Parent = bb
+        hb.BorderSizePixel = 0; hb.Parent = bb
         local hbar = Instance.new("Frame")
         hbar.Name = "P"
         hbar.Size = UDim2.new(1, 0, 1, 0)
@@ -945,11 +920,36 @@ local function addESP(plr)
         dl.BackgroundTransparency = 1
         dl.TextColor3 = Color3.fromRGB(255, 220, 100); dl.Font = Enum.Font.Gotham
         dl.TextSize = 11; dl.TextStrokeTransparency = 0.4
-        dl.Text = "-"; dl.Visible = Config.ESPDistance; dl.Parent = bb
+        dl.Text = "-"; dl.Parent = bb
 
-        bb.Parent = targetParent
         State.ESPObjects["name_" .. plr.Name] = bb
         State.ESPObjects["hrp_" .. plr.Name] = target
+    end
+
+    -- Parent-kan & Update state (tanpa destroy)
+    hl.Parent = targetParent
+    hl.Adornee = target
+    hl.Enabled = Config.ESP
+
+    bb.Parent = targetParent
+    bb.Adornee = target
+    bb.Enabled = (Config.ESP and (Config.ESPNames or Config.ESPHealth or Config.ESPDistance))
+    
+    bb:FindFirstChild("N").Visible = Config.ESPNames
+    bb:FindFirstChild("H").Visible = Config.ESPHealth
+    bb:FindFirstChild("D").Visible = Config.ESPDistance
+end
+
+local function hideESPInstance(plr)
+    local hl = State.ESPObjects[plr]
+    if hl then
+        hl.Enabled = false
+        hl.Adornee = nil
+    end
+    local bb = State.ESPObjects["name_" .. plr.Name]
+    if bb then
+        bb.Enabled = false
+        bb.Adornee = nil
     end
 end
 
@@ -962,13 +962,13 @@ track(RunService.RenderStepped:Connect(function()
     for key, bb in pairs(State.ESPObjects) do
         if type(key) == "string" and key:sub(1, 5) == "name_" then
             local plrName = key:sub(6)
-            if bb and bb.Parent then
+            if bb and bb.Parent and bb.Enabled then
                 local targetPart = State.ESPObjects["hrp_" .. plrName]
                 local plr = Players:FindFirstChild(plrName)
                 local hum = plr and plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
                 
                 local hb = bb:FindFirstChild("H")
-                if hb then
+                if hb and hb.Visible then
                     local bar = hb:FindFirstChild("P")
                     if bar and hum then
                         local pct = math.clamp(hum.Health / math.max(hum.MaxHealth, 1), 0, 1)
@@ -979,7 +979,7 @@ track(RunService.RenderStepped:Connect(function()
                 end
                 
                 local dl = bb:FindFirstChild("D")
-                if dl and targetPart and targetPart.Parent and lpPos then
+                if dl and dl.Visible and targetPart and targetPart.Parent and lpPos then
                     local targetPos = nil
                     if targetPart:IsA("BasePart") then
                         targetPos = targetPart.Position
@@ -1000,14 +1000,14 @@ local function setupPlayerESP(plr)
     local function onCharacter(char)
         if Config.ESP then
             task.wait(0.3)
-            addESP(plr)
+            toggleESPInstance(plr, char)
         end
         local hum = char:FindFirstChildOfClass("Humanoid") or char:WaitForChild("Humanoid", 5)
         if hum then
             track(hum.Seated:Connect(function()
                 if Config.ESP then
                     task.wait(0.2)
-                    addESP(plr)
+                    toggleESPInstance(plr, char)
                 end
             end))
         end
@@ -1023,8 +1023,10 @@ end
 track(Players.PlayerAdded:Connect(setupPlayerESP))
 
 track(Players.PlayerRemoving:Connect(function(p)
-    safeDestroy(State.ESPObjects[p])
-    safeDestroy(State.ESPObjects["name_" .. p.Name])
+    local hl = State.ESPObjects[p]
+    if hl then hl:Destroy() end
+    local bb = State.ESPObjects["name_" .. p.Name]
+    if bb then bb:Destroy() end
     State.ESPObjects[p] = nil
     State.ESPObjects["name_" .. p.Name] = nil
     State.ESPObjects["hrp_" .. p.Name] = nil
@@ -1032,9 +1034,13 @@ end))
 
 local function refreshESPAll()
     if Config.ESP then
-        for _, p in ipairs(Players:GetPlayers()) do if p ~= LP then addESP(p) end end
+        for _, p in ipairs(Players:GetPlayers()) do 
+            if p ~= LP and p.Character then toggleESPInstance(p, p.Character) end 
+        end
     else
-        clearESP()
+        for _, p in ipairs(Players:GetPlayers()) do 
+            if p ~= LP then hideESPInstance(p) end 
+        end
     end
 end
 
@@ -2530,9 +2536,11 @@ local function buildUI()
             Workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
             State.CameraLockedByUs = false
         end
-        clearESP(); teardownLinearVelocity()
+        refreshESPAll() -- Biar mati total
+        teardownLinearVelocity()
         State.CachedInputMode = nil
         State.ManualClutchOn = false
+        State.LastAutoShiftSpeed = 0
         Teleport.LastScan = 0; Teleport.ScanCache = {}
         LandmarkCache.t = 0; LandmarkCache.map = {}
         task.spawn(saveConfig)
@@ -2786,8 +2794,7 @@ end)
 
 track(LP.CharacterAdded:Connect(function()
     releaseAllInput()
-    clearESP()
-    refreshESPAll()
+    refreshESPAll() -- Jangan destroy, cukup hide
     teardownLinearVelocity()
     State.LaunchPhase = "idle"
     State.ManualClutchOn = false
