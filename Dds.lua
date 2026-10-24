@@ -1,6 +1,5 @@
--- Drag Drive Simulator — v3.3 (Smoothness + Bugfix)
--- Fix: task.wait removed from Heartbeat, ESP 15Hz throttle, hrp_ stale bug, seated leak,
---      NPC invalidation filter, cache TTLs up, AutoShift reset on toggle
+-- Drag Drive Simulator — v3.4 (Anti-Throttle Drop)
+-- Fix: Non-yielding shift, force re-assert throttle key on shift up/down
 -- Target: Roblox (Delta PC + Delta Mobile / Arceus / Krnl / Wave / Xeno)
 
 if _G.DDS_Connections then
@@ -404,7 +403,9 @@ local function releaseAllInput()
     for _, k in ipairs(keys) do mobileHoldEnd(k) end
 end
 
--- PURE KEYCODE ACTION LAYER (No touch conflict)
+-- ============================================================
+-- ACTION LAYER (ANTI-THROTTLE DROP)
+-- ============================================================
 local function actionAccelerate(hold)
     if hold then tapKey(Enum.KeyCode.W, hold)
     else setKeyHeld(Enum.KeyCode.W, true) end
@@ -415,11 +416,27 @@ local function actionReleaseAccelerate()
 end
 
 local function actionShiftUp()
-    tapKey(Enum.KeyCode.E, 0.08)
+    local wasGasHeld = State.HeldKeys[Enum.KeyCode.W]
+    -- Nembak E tanpa nge-block (yield) thread utama
+    pcall(function() VIM:SendKeyEvent(true, Enum.KeyCode.E, false, game) end)
+    task.delay(0.1, function()
+        pcall(function() VIM:SendKeyEvent(false, Enum.KeyCode.E, false, game) end)
+        if wasGasHeld then
+            -- Maksa re-press W biar gas ga drop
+            pcall(function() VIM:SendKeyEvent(true, Enum.KeyCode.W, false, game) end)
+        end
+    end)
 end
 
 local function actionShiftDown()
-    tapKey(Enum.KeyCode.Q, 0.08)
+    local wasGasHeld = State.HeldKeys[Enum.KeyCode.W]
+    pcall(function() VIM:SendKeyEvent(true, Enum.KeyCode.Q, false, game) end)
+    task.delay(0.1, function()
+        pcall(function() VIM:SendKeyEvent(false, Enum.KeyCode.Q, false, game) end)
+        if wasGasHeld then
+            pcall(function() VIM:SendKeyEvent(true, Enum.KeyCode.W, false, game) end)
+        end
+    end)
 end
 
 local function actionEnableManualClutch()
@@ -577,7 +594,6 @@ local function greenVisible()
     return false
 end
 
--- PerfectStart: task.wait removed, uses task.delay (no Heartbeat yield)
 track(RunService.Heartbeat:Connect(function()
     if not Config.PerfectStart or not State.Ready then
         if State.LaunchPhase ~= "idle"
@@ -602,8 +618,6 @@ track(RunService.Heartbeat:Connect(function()
 
             if Config.ManualClutchMode then actionEnableManualClutch() end
             actionNeutral()
-            -- Move the "wait + shift up + clutch hold" sequence to task.delay,
-            -- so Heartbeat is not yielded (removes 50ms stutter)
             task.delay(0.05, function()
                 if not State.Ready then return end
                 if Config.UseGear1 then actionShiftUp() end
@@ -652,7 +666,7 @@ track(RunService.Heartbeat:Connect(function()
     end
 end))
 
--- AutoShift: Hybrid RPM + Speed
+-- AutoShift (Anti-Drop)
 track(RunService.Heartbeat:Connect(function()
     if not Config.AutoShift or not State.Ready then return end
     if State.LaunchPhase ~= "idle" then return end
@@ -783,7 +797,6 @@ task.spawn(function()
     end
 end)
 
--- Camera Lock: early return when not needed
 track(RunService.RenderStepped:Connect(function()
     local cam = Workspace.CurrentCamera
     if not cam then return end
@@ -818,7 +831,7 @@ track(RunService.RenderStepped:Connect(function()
 end))
 
 -- ============================================================
--- ESP (Smoothness: 15Hz text update, hrp_ stale fix)
+-- ESP (Pooling Fix - Anti Invisible)
 -- ============================================================
 local function toggleESPInstance(plr, char)
     if not char or not char.Parent then return end
@@ -885,7 +898,6 @@ local function toggleESPInstance(plr, char)
         State.ESPObjects["name_" .. plr.Name] = bb
     end
 
-    -- FIX: always update the target ref (was inside if-not-bb block, stale on vehicle switch)
     State.ESPObjects["hrp_" .. plr.Name] = target
 
     hl.Parent = targetParent
@@ -908,7 +920,6 @@ local function hideESPInstance(plr)
     if bb then bb.Enabled = false; bb.Adornee = nil end
 end
 
--- ESP text update: throttled to ~15Hz (was 60Hz, massive mobile lag)
 track(RunService.RenderStepped:Connect(function()
     if not Config.ESP then return end
     local now = os.clock()
@@ -957,7 +968,6 @@ end))
 local function setupPlayerESP(plr)
     if plr == LP then return end
     local function onCharacter(char)
-        -- Disconnect old Seated listener for this player (fix leak)
         local oldConns = State.SeatedConns[plr]
         if oldConns then
             for _, c in ipairs(oldConns) do pcall(function() c:Disconnect() end) end
@@ -1035,7 +1045,7 @@ track(LP.Idled:Connect(function()
 end))
 
 -- ============================================================
--- FARM (Smoothness: smarter invalidation, 4s cooldown)
+-- FARM
 -- ============================================================
 local JOB_KEYWORDS = {
     courier = {"courier","package","delivery","kurir","paket","ridego","driver","ojek"},
@@ -1045,7 +1055,6 @@ local JOB_KEYWORDS = {
 
 local NpcCache = { List = {}, LastScan = 0, ScanCooldown = 4.0 }
 local lastNpcInvalidate = 0
--- Only invalidate on new Humanoid (not every part/vehicle/effect)
 track(Workspace.DescendantAdded:Connect(function(obj)
     if not obj:IsA("Humanoid") then return end
     local parent = obj.Parent
@@ -1259,7 +1268,7 @@ task.spawn(function()
 end)
 
 -- ============================================================
--- MATH ENGINE (Cache TTL increased for smoothness)
+-- MATH ENGINE
 -- ============================================================
 local SYMBOL_OPS = {
     ["×"] = "*", ["÷"] = "/",
@@ -1692,7 +1701,7 @@ watchdog("redeem", function()
 end, 0.5)
 
 -- ============================================================
--- UI (same as v3.2, no changes needed)
+-- UI
 -- ============================================================
 local GuiHost = nil
 do
