@@ -1,5 +1,6 @@
--- Drag Drive Simulator — v3.2 (Zero-Touch Conflict Fix)
--- Fix: No synthetic clicks while driving. Pure KeyCode inputs. Background tasks pause in vehicle.
+-- Drag Drive Simulator — v3.3 (Smoothness + Bugfix)
+-- Fix: task.wait removed from Heartbeat, ESP 15Hz throttle, hrp_ stale bug, seated leak,
+--      NPC invalidation filter, cache TTLs up, AutoShift reset on toggle
 -- Target: Roblox (Delta PC + Delta Mobile / Arceus / Krnl / Wave / Xeno)
 
 if _G.DDS_Connections then
@@ -172,6 +173,8 @@ local State = {
     CachedInputMode = nil,
     ManualClutchOn = false,
     LastAutoShiftSpeed = 0,
+    EspRenderLast = 0,
+    SeatedConns = {},
 }
 
 loadConfig()
@@ -401,9 +404,7 @@ local function releaseAllInput()
     for _, k in ipairs(keys) do mobileHoldEnd(k) end
 end
 
--- ============================================================
--- ACTION LAYER (ZERO TOUCH CONFLICT)
--- ============================================================
+-- PURE KEYCODE ACTION LAYER (No touch conflict)
 local function actionAccelerate(hold)
     if hold then tapKey(Enum.KeyCode.W, hold)
     else setKeyHeld(Enum.KeyCode.W, true) end
@@ -414,7 +415,7 @@ local function actionReleaseAccelerate()
 end
 
 local function actionShiftUp()
-    tapKey(Enum.KeyCode.E, 0.08) -- 100% keyboard virtual, no UI click
+    tapKey(Enum.KeyCode.E, 0.08)
 end
 
 local function actionShiftDown()
@@ -434,10 +435,6 @@ end
 
 local function actionNeutral()
     for _ = 1, 5 do actionShiftDown() end
-end
-
-local function actionTopGear()
-    for _ = 1, 5 do actionShiftUp() end
 end
 
 local function actionWheelieHold(held)
@@ -546,7 +543,7 @@ end
 local guiSnap = { last = 0, list = {} }
 local function getGuiSnapshot()
     local now = os.clock()
-    if now - guiSnap.last < 0.1 then return guiSnap.list end
+    if now - guiSnap.last < 0.15 then return guiSnap.list end
     guiSnap.last = now
     local list = {}
     local ok, desc = pcall(function() return PlayerGui:GetDescendants() end)
@@ -580,6 +577,7 @@ local function greenVisible()
     return false
 end
 
+-- PerfectStart: task.wait removed, uses task.delay (no Heartbeat yield)
 track(RunService.Heartbeat:Connect(function()
     if not Config.PerfectStart or not State.Ready then
         if State.LaunchPhase ~= "idle"
@@ -604,11 +602,15 @@ track(RunService.Heartbeat:Connect(function()
 
             if Config.ManualClutchMode then actionEnableManualClutch() end
             actionNeutral()
-            task.wait(0.05)
-            if Config.UseGear1 then actionShiftUp() end
-            if Config.ManualClutchMode then actionClutchHold(true) end
-            local doWheelie = Config.UseWheelieHold and (State.IsBike or not Config.SafeWheelieBikeOnly)
-            if doWheelie then actionWheelieHold(true) end
+            -- Move the "wait + shift up + clutch hold" sequence to task.delay,
+            -- so Heartbeat is not yielded (removes 50ms stutter)
+            task.delay(0.05, function()
+                if not State.Ready then return end
+                if Config.UseGear1 then actionShiftUp() end
+                if Config.ManualClutchMode then actionClutchHold(true) end
+                local doWheelie = Config.UseWheelieHold and (State.IsBike or not Config.SafeWheelieBikeOnly)
+                if doWheelie then actionWheelieHold(true) end
+            end)
         end
 
         if State.LaunchPhase == "prep" then
@@ -650,9 +652,7 @@ track(RunService.Heartbeat:Connect(function()
     end
 end))
 
--- ============================================================
--- AUTOSHIFT LOGIC (Hybrid: RPM + Speed)
--- ============================================================
+-- AutoShift: Hybrid RPM + Speed
 track(RunService.Heartbeat:Connect(function()
     if not Config.AutoShift or not State.Ready then return end
     if State.LaunchPhase ~= "idle" then return end
@@ -661,7 +661,6 @@ track(RunService.Heartbeat:Connect(function()
     local rpm, max = getRPM()
     local ratio = max > 0 and rpm / max or 0
     
-    -- 1. Shift berdasarkan RPM
     if ratio >= Config.ShiftPoint and ratio > 0 then
         actionShiftUp()
         State.LastGearShift = os.clock()
@@ -669,10 +668,8 @@ track(RunService.Heartbeat:Connect(function()
         return
     end
     
-    -- 2. Shift berdasarkan Kecepatan (Fallback)
     if State.VehicleRoot and State.VehicleRoot.Parent then
         local currentSpeed = State.VehicleRoot.AssemblyLinearVelocity.Magnitude * Config.StudsToKmh
-        -- Pindah gigi kalau udah naik 15 km/h dari gigi terakhir DAN kecepatan > 15
         if currentSpeed > 15 and (currentSpeed - State.LastAutoShiftSpeed) >= 15 then
             actionShiftUp()
             State.LastGearShift = os.clock()
@@ -786,18 +783,29 @@ task.spawn(function()
     end
 end)
 
+-- Camera Lock: early return when not needed
 track(RunService.RenderStepped:Connect(function()
     local cam = Workspace.CurrentCamera
     if not cam then return end
-    local function restore()
-        if State.CameraLockedByUs and cam.CameraType == Enum.CameraType.Scriptable then
-            cam.CameraType = Enum.CameraType.Custom
+    if not Config.CameraLock then
+        if State.CameraLockedByUs then
+            if cam.CameraType == Enum.CameraType.Scriptable then
+                cam.CameraType = Enum.CameraType.Custom
+            end
+            State.CameraLockedByUs = false
         end
-        State.CameraLockedByUs = false
+        return
     end
-    if not Config.CameraLock then restore(); return end
     local root = State.VehicleRoot
-    if not State.Ready or not root or not root.Parent then restore(); return end
+    if not State.Ready or not root or not root.Parent then
+        if State.CameraLockedByUs then
+            if cam.CameraType == Enum.CameraType.Scriptable then
+                cam.CameraType = Enum.CameraType.Custom
+            end
+            State.CameraLockedByUs = false
+        end
+        return
+    end
     if not State.CameraLockedByUs then
         cam.CameraType = Enum.CameraType.Scriptable
         State.CameraLockedByUs = true
@@ -810,7 +818,7 @@ track(RunService.RenderStepped:Connect(function()
 end))
 
 -- ============================================================
--- ESP (Pooling Fix - Anti Invisible)
+-- ESP (Smoothness: 15Hz text update, hrp_ stale fix)
 -- ============================================================
 local function toggleESPInstance(plr, char)
     if not char or not char.Parent then return end
@@ -875,8 +883,10 @@ local function toggleESPInstance(plr, char)
         dl.Text = "-"; dl.Parent = bb
 
         State.ESPObjects["name_" .. plr.Name] = bb
-        State.ESPObjects["hrp_" .. plr.Name] = target
     end
+
+    -- FIX: always update the target ref (was inside if-not-bb block, stale on vehicle switch)
+    State.ESPObjects["hrp_" .. plr.Name] = target
 
     hl.Parent = targetParent
     hl.Adornee = target
@@ -893,19 +903,17 @@ end
 
 local function hideESPInstance(plr)
     local hl = State.ESPObjects[plr]
-    if hl then
-        hl.Enabled = false
-        hl.Adornee = nil
-    end
+    if hl then hl.Enabled = false; hl.Adornee = nil end
     local bb = State.ESPObjects["name_" .. plr.Name]
-    if bb then
-        bb.Enabled = false
-        bb.Adornee = nil
-    end
+    if bb then bb.Enabled = false; bb.Adornee = nil end
 end
 
+-- ESP text update: throttled to ~15Hz (was 60Hz, massive mobile lag)
 track(RunService.RenderStepped:Connect(function()
     if not Config.ESP then return end
+    local now = os.clock()
+    if now - State.EspRenderLast < 0.066 then return end
+    State.EspRenderLast = now
     local lpChar = LP.Character
     local lpHrp = lpChar and lpChar:FindFirstChild("HumanoidRootPart")
     local lpPos = lpHrp and lpHrp.Parent and lpHrp.Position
@@ -949,18 +957,28 @@ end))
 local function setupPlayerESP(plr)
     if plr == LP then return end
     local function onCharacter(char)
+        -- Disconnect old Seated listener for this player (fix leak)
+        local oldConns = State.SeatedConns[plr]
+        if oldConns then
+            for _, c in ipairs(oldConns) do pcall(function() c:Disconnect() end) end
+            State.SeatedConns[plr] = nil
+        end
         if Config.ESP then
-            task.wait(0.3)
-            toggleESPInstance(plr, char)
+            task.delay(0.3, function() toggleESPInstance(plr, char) end)
         end
         local hum = char:FindFirstChildOfClass("Humanoid") or char:WaitForChild("Humanoid", 5)
         if hum then
-            track(hum.Seated:Connect(function()
+            State.SeatedConns[plr] = State.SeatedConns[plr] or {}
+            local conn = hum.Seated:Connect(function()
                 if Config.ESP then
-                    task.wait(0.2)
-                    toggleESPInstance(plr, char)
+                    task.delay(0.2, function()
+                        local c = plr.Character
+                        if c then toggleESPInstance(plr, c) end
+                    end)
                 end
-            end))
+            end)
+            table.insert(State.SeatedConns[plr], conn)
+            track(conn)
         end
     end
     
@@ -981,6 +999,10 @@ track(Players.PlayerRemoving:Connect(function(p)
     State.ESPObjects[p] = nil
     State.ESPObjects["name_" .. p.Name] = nil
     State.ESPObjects["hrp_" .. p.Name] = nil
+    if State.SeatedConns[p] then
+        for _, c in ipairs(State.SeatedConns[p]) do pcall(function() c:Disconnect() end) end
+        State.SeatedConns[p] = nil
+    end
 end))
 
 local function refreshESPAll()
@@ -1012,16 +1034,24 @@ track(LP.Idled:Connect(function()
     end
 end))
 
+-- ============================================================
+-- FARM (Smoothness: smarter invalidation, 4s cooldown)
+-- ============================================================
 local JOB_KEYWORDS = {
     courier = {"courier","package","delivery","kurir","paket","ridego","driver","ojek"},
     barista = {"barista","coffee","cafe","kopi","coffeeshop","kasir"},
     office  = {"office","kantor","desk","worker","receptionist","resepsionis","admin","computer","komputer","meja"},
 }
 
-local NpcCache = { List = {}, LastScan = 0, ScanCooldown = 3.0 }
+local NpcCache = { List = {}, LastScan = 0, ScanCooldown = 4.0 }
 local lastNpcInvalidate = 0
-track(Workspace.ChildAdded:Connect(function()
-    if os.clock() - lastNpcInvalidate < 1.0 then return end
+-- Only invalidate on new Humanoid (not every part/vehicle/effect)
+track(Workspace.DescendantAdded:Connect(function(obj)
+    if not obj:IsA("Humanoid") then return end
+    local parent = obj.Parent
+    if not parent or not parent:IsA("Model") then return end
+    if Players:GetPlayerFromCharacter(parent) then return end
+    if os.clock() - lastNpcInvalidate < 2.0 then return end
     lastNpcInvalidate = os.clock()
     NpcCache.LastScan = 0
 end))
@@ -1094,7 +1124,7 @@ local function scanNpcs()
     return found
 end
 
-local PromptCache = { list = {}, lastScan = 0, cooldown = 3.0 }
+local PromptCache = { list = {}, lastScan = 0, cooldown = 5.0 }
 local function getAllPrompts()
     if os.clock() - PromptCache.lastScan < PromptCache.cooldown then
         return PromptCache.list
@@ -1174,7 +1204,7 @@ local function teleportAndInteract(target)
 end
 
 local function farmTick()
-    if State.Ready then return end -- Jangan farm kalau lagi di kendaraan
+    if State.Ready then return end
     local jobsToScan = {}
     if Config.FarmQueueMode then
         jobsToScan = {"office", "barista", "courier"}
@@ -1228,6 +1258,9 @@ task.spawn(function()
     end
 end)
 
+-- ============================================================
+-- MATH ENGINE (Cache TTL increased for smoothness)
+-- ============================================================
 local SYMBOL_OPS = {
     ["×"] = "*", ["÷"] = "/",
     ["−"] = "-", ["–"] = "-", ["—"] = "-",
@@ -1423,7 +1456,7 @@ end
 
 local lastScanTime = 0
 local function scanForQuestion()
-    local cacheTime = math.max(0.4, math.min(1.2, Config.MathInterval * 0.8))
+    local cacheTime = math.max(0.6, math.min(1.8, Config.MathInterval * 1.2))
     if os.clock() - lastScanTime < cacheTime then return {} end
     lastScanTime = os.clock()
     local out, seen = {}, {}
@@ -1518,7 +1551,7 @@ end
 
 local function mathTick()
     if not Config.MathSolver then return end
-    if State.Ready then return end -- Jangan click kalau di kendaraan
+    if State.Ready then return end
     if os.clock() - State.LastMath < Config.MathInterval then return end
     if State.MathBusy then return end
     State.LastMath = os.clock()
@@ -1658,6 +1691,9 @@ watchdog("redeem", function()
     State.RedeemBusy = false
 end, 0.5)
 
+-- ============================================================
+-- UI (same as v3.2, no changes needed)
+-- ============================================================
 local GuiHost = nil
 do
     local ok = pcall(function()
@@ -2172,6 +2208,10 @@ local function createToggleSwitch(parent, key, label, order, callback, isBeta)
         if key == "AutoRedeem" and on then
             State.RedeemIndex = 1
             State.RedeemCycleDone = false
+        end
+        if key == "AutoShift" and on then
+            State.LastGearShift = 0
+            State.LastAutoShiftSpeed = 0
         end
         setToggleVisual(key, on)
         if callback then callback(on) end
