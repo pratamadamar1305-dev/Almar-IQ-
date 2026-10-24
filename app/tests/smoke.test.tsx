@@ -76,9 +76,10 @@ async function main() {
   const panel = document.querySelector('.ger-item.open .gfig-panel svg.gfig')
   ok('panel ilustrasi di accordion', !!panel)
   ok('panel punya gambar (line)', (panel?.querySelectorAll('line,circle').length ?? 0) > 8)
-  ok('panel punya animasi gerak', (panel?.innerHTML || '').includes('<animate'))
+  ok('panel memperlihatkan dua tahap', document.querySelectorAll('.ger-item.open .gfig-panel .gfig-step').length === 2)
+  ok('tahap awal dan akhir statis agar mudah dibandingkan', !(panel?.innerHTML || '').includes('<animate'))
   ok('ilustrasi tidak NaN', !(panel?.innerHTML || '').includes('NaN'))
-  ok('svg ilustrasi punya aria-label', (panel?.getAttribute('aria-label') || '').includes('Ilustrasi'))
+  ok('panel ilustrasi punya aria-label', (document.querySelector('.ger-item.open .gfig-steps')?.getAttribute('aria-label') || '').includes('Ilustrasi'))
   const css = document.getElementById('fig-css')
   ok('css ilustrasi disuntik sekali', !!css && (css.textContent || '').includes('.gfig'))
   ok('css ilustrasi tidak dobel', document.querySelectorAll('#fig-css').length === 1)
@@ -93,7 +94,7 @@ async function main() {
   ok('nama gerakan di player', txt().includes('Pike Push-Up'))
   ok('timer tampil', /\d{2}:\d{2}/.test(txt()))
   ok('ilustrasi tampil di player', !!document.querySelector('.player-fig svg.gfig'))
-  ok('ilustrasi player beranimasi', (document.querySelector('.player-fig')?.innerHTML || '').includes('<animate'))
+  ok('ilustrasi player punya tahap siap dan gerak', document.querySelectorAll('.player-fig .gfig-step').length === 2)
 
   // 5. Selesaikan set 1 -> rest
   await click(byText('Set Selesai'), 'Set Selesai')

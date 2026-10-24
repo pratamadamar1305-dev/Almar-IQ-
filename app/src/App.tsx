@@ -110,7 +110,8 @@ function IzinGate() {
       }
     >
       <p>
-        Latihan ini pakai <b style={{ color: 'var(--txt)' }}>sapu kayu + tas sekolah</b>. Pastikan:
+        Ini latihan untuk anak usia sekolah, <b style={{ color: 'var(--txt)' }}>bukan untuk bayi atau balita</b>.
+        Mulai hanya setelah orang tua/pelatih mengizinkan. Pastikan sapu kayu dan tas sekolah aman:
       </p>
       <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
         {[

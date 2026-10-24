@@ -521,7 +521,7 @@ export default function Player() {
                   </div>
                 </div>
                 <div>
-                  <b>Cara:</b> {ger.cara}
+                  <b>Cara (ikuti gambar 1 → 2):</b> {ger.cara}
                 </div>
                 {ger.salah && (
                   <div style={{ marginTop: 10, color: '#fca5a5' }}>

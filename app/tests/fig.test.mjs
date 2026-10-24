@@ -117,7 +117,26 @@ for (const id of ids) {
   }
 }
 
-/* 4. markup SVG */
+/* 4. Gerakan yang dulu terlihat keliru: jaga arah dan titik pentingnya. */
+const jarak = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1])
+for (const id of ['senin-pike', 'jumat-pike']) {
+  ok(`${id} benar-benar turun di fase akhir`, poses[id].b.h[1] - poses[id].a.h[1] >= 4)
+}
+const fly = poses['kamis-reverse-fly']
+ok('reverse fly membungkuk dari pinggul', Math.abs(fly.b.p[0] - fly.b.n[0]) > 18 && jarak(fly.b.p, fly.b.n) <= 30.6)
+ok('reverse fly sapu berhenti setinggi dada, bukan kepala', fly.b.br[0][1] > fly.b.h[1] + 12 && Math.abs(fly.b.br[0][1] - fly.b.br[1][1]) < 1)
+const ext = poses['kamis-overhead-ext']
+ok('overhead extension mulai dengan tas di atas kepala', ext.a.tas[1] < ext.a.h[1] - 15)
+ok('overhead extension akhir menurunkan tas di belakang kepala', ext.b.tasBehind === 1 && ext.b.tas[1] > ext.b.h[1])
+const hurdle = poses['kamis-hurdle']
+ok('hurdle mulai di satu sisi sapu', hurdle.a.t[0] < hurdle.a.br[0][0])
+ok('hurdle melompat melewati sapu pada fase akhir', hurdle.b.a[1] < hurdle.b.br[0][1] && hurdle.b.a2[1] < hurdle.b.br[0][1])
+for (const id of ['senin-kuda', 'jumat-kuda']) {
+  ok(`${id} kuda-kuda punya pijakan lebar`, Math.abs(poses[id].b.a[0] - poses[id].b.a2[0]) > 40)
+}
+ok('tas farmer walk menggantung dekat tangan', Math.abs(poses['selasa-farmer'].a.tas[0] - poses['selasa-farmer'].a.w[0]) < 4 && Math.abs(poses['selasa-farmer'].a.tas[1] - poses['selasa-farmer'].a.w[1]) < 4)
+
+/* 5. markup SVG */
 for (const id of ids) {
   const still = fig.figMarkup(id, {})
   ok(`${id} markup statis tidak kosong`, still.length > 100)

@@ -39,6 +39,10 @@ export default function Aturan() {
         </div>
       </div>
 
+      <div className="warn-box" role="note" style={{ marginBottom: 14 }}>
+        <b>Bukan untuk bayi atau balita.</b> Latihan ini dibuat untuk anak usia sekolah. Anak harus didampingi orang tua atau pelatih; jangan mencoba gerakan yang belum disetujui orang dewasa.
+      </div>
+
       <div className="card" style={{ borderColor: 'rgba(255,107,26,0.3)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ fontSize: 22 }}>🥋</span>
