@@ -1,5 +1,5 @@
--- Drag Drive Simulator — v2.7 (ESP Highlight Fix)
--- Fix: BoxHandleAdornment dihapus -> Highlight. Karakter ga glitch, motor ke-detect.
+-- Drag Drive Simulator — v2.8 (ESP Seated & Destroy Fix)
+-- Fix: Highlight nempel ke motor pas duduk, anti-invisible pas ESP dimatiin.
 -- Target: Roblox (Delta PC + Delta Mobile / Arceus / Krnl / Wave / Xeno)
 
 if _G.DDS_Connections then
@@ -834,11 +834,22 @@ track(RunService.RenderStepped:Connect(function()
 end))
 
 -- ============================================================
--- ESP (Highlight Fix)
+-- ESP (Highlight Fix v2.8)
 -- ============================================================
+local function safeDestroy(obj)
+    if not obj or not obj.Parent then return end
+    pcall(function()
+        if obj:IsA("Highlight") then
+            obj.Enabled = false
+            obj.Adornee = nil
+        end
+        obj:Destroy()
+    end)
+end
+
 local function clearESP()
     for _, o in pairs(State.ESPObjects) do 
-        if o and o.Parent then o:Destroy() end 
+        safeDestroy(o)
     end
     table.clear(State.ESPObjects)
 end
@@ -846,41 +857,46 @@ end
 local function addESP(plr)
     if plr == LP or not Config.ESP then return end
     local char = plr.Character
-    if not char then return end
+    if not char or not char.Parent then return end
     local hum = char:FindFirstChildOfClass("Humanoid")
     
-    -- Hapus ESP lama kalau ada
-    local old = State.ESPObjects[plr]
-    if old and old.Parent then old:Destroy() end
-    local oldName = State.ESPObjects["name_" .. plr.Name]
-    if oldName and oldName.Parent then oldName:Destroy() end
-
-    -- 1. Tentukan target: Motor/Mobil atau Karakter?
+    -- Cleanup old ESP
+    safeDestroy(State.ESPObjects[plr])
+    safeDestroy(State.ESPObjects["name_" .. plr.Name])
+    State.ESPObjects[plr] = nil
+    State.ESPObjects["name_" .. plr.Name] = nil
+    
     local target = char
+    local targetParent = char
+    
+    -- Kalau duduk di motor/mobil, pindah target ke kendaraannya
     if hum and hum.SeatPart and hum.SeatPart.Parent then
-        target = hum.SeatPart.Parent -- Highlight kendaraannya, bukan orangnya
+        target = hum.SeatPart.Parent
+        targetParent = target 
     end
 
-    -- 2. Pasang Highlight (Ringan & Anti Glitch)
+    if not target or not target.Parent then return end
+
+    -- 1. Highlight (Ringan & Anti Glitch)
     local hl = Instance.new("Highlight")
     hl.Name = "ESP_HL_" .. plr.Name
     hl.Adornee = target
     hl.FillColor = Config.ESPColor
     hl.OutlineColor = Config.ESPColor
-    hl.FillTransparency = 0.6
+    hl.FillTransparency = 0.7 -- Lebih transparan biar ga nutupin karakter
     hl.OutlineTransparency = 0
     hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-    hl.Parent = char
+    hl.Parent = targetParent
     State.ESPObjects[plr] = hl
 
-    -- 3. BillboardGui (Nama, Health, Jarak)
+    -- 2. BillboardGui (Nama, Health, Jarak)
     if Config.ESPNames or Config.ESPHealth or Config.ESPDistance then
         local bb = Instance.new("BillboardGui")
         bb.Name = "B" .. plr.Name
         bb.Adornee = target 
         bb.AlwaysOnTop = true
         bb.Size = UDim2.new(0, 160, 0, 46)
-        bb.StudsOffset = Vector3.new(0, 3, 0) -- Offset dari atap kendaraan/kepala
+        bb.StudsOffset = Vector3.new(0, 3, 0) 
 
         local nameLbl = Instance.new("TextLabel")
         nameLbl.Name = "N"
@@ -910,9 +926,9 @@ local function addESP(plr)
         dl.TextSize = 11; dl.TextStrokeTransparency = 0.4
         dl.Text = "-"; dl.Visible = Config.ESPDistance; dl.Parent = bb
 
-        bb.Parent = char
+        bb.Parent = targetParent
         State.ESPObjects["name_" .. plr.Name] = bb
-        State.ESPObjects["hrp_" .. plr.Name] = target -- Simpan target untuk kalkulasi jarak
+        State.ESPObjects["hrp_" .. plr.Name] = target
     end
 end
 
@@ -930,7 +946,6 @@ track(RunService.RenderStepped:Connect(function()
                 local plr = Players:FindFirstChild(plrName)
                 local hum = plr and plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
                 
-                -- Update Health
                 local hb = bb:FindFirstChild("H")
                 if hb then
                     local bar = hb:FindFirstChild("P")
@@ -942,7 +957,6 @@ track(RunService.RenderStepped:Connect(function()
                     end
                 end
                 
-                -- Update Jarak (kalau targetnya motor, jarak ngikutin motor)
                 local dl = bb:FindFirstChild("D")
                 if dl and targetPart and targetPart.Parent and lpPos then
                     local targetPos = nil
@@ -960,26 +974,40 @@ track(RunService.RenderStepped:Connect(function()
     end
 end))
 
-track(Players.PlayerAdded:Connect(function(plr)
-    track(plr.CharacterAdded:Connect(function()
-        if Config.ESP then task.wait(0.3); addESP(plr) end
-    end))
-end))
-for _, p in ipairs(Players:GetPlayers()) do
-    track(p.CharacterAdded:Connect(function()
-        if Config.ESP then task.wait(0.3); addESP(p) end
-    end))
-    if p.Character and Config.ESP then addESP(p) end
+local function setupPlayerESP(plr)
+    if plr == LP then return end
+    local function onCharacter(char)
+        if Config.ESP then
+            task.wait(0.3)
+            addESP(plr)
+        end
+        local hum = char:FindFirstChildOfClass("Humanoid") or char:WaitForChild("Humanoid", 5)
+        if hum then
+            -- Pindahin ESP target otomatis pas orang naik / turun motor
+            track(hum.Seated:Connect(function()
+                if Config.ESP then
+                    task.wait(0.2) -- Delay dikit biar game sempet update SeatPart
+                    addESP(plr)
+                end
+            end))
+        end
+    end
+    
+    track(plr.CharacterAdded:Connect(onCharacter))
+    if plr.Character then onCharacter(plr.Character) end
 end
+
+for _, p in ipairs(Players:GetPlayers()) do
+    setupPlayerESP(p)
+end
+track(Players.PlayerAdded:Connect(setupPlayerESP))
+
 track(Players.PlayerRemoving:Connect(function(p)
-    local box = State.ESPObjects[p]
-    if box and box.Parent then box:Destroy() end
+    safeDestroy(State.ESPObjects[p])
+    safeDestroy(State.ESPObjects["name_" .. p.Name])
     State.ESPObjects[p] = nil
-    local nm = State.ESPObjects["name_" .. p.Name]
-    if nm and nm.Parent then nm:Destroy() end
     State.ESPObjects["name_" .. p.Name] = nil
     State.ESPObjects["hrp_" .. p.Name] = nil
-    State.ESPObjects["hum_" .. p.Name] = nil
 end))
 
 local function refreshESPAll()
