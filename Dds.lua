@@ -1,5 +1,5 @@
--- Drag Drive Simulator — v2.8 (ESP Seated & Destroy Fix)
--- Fix: Highlight nempel ke motor pas duduk, anti-invisible pas ESP dimatiin.
+-- Drag Drive Simulator — v2.9 (Auto Shift Fix)
+-- Fix: AutoShift Hybrid (RPM + Speed fallback), Longer mobile tap, Wider keywords.
 -- Target: Roblox (Delta PC + Delta Mobile / Arceus / Krnl / Wave / Xeno)
 
 if _G.DDS_Connections then
@@ -171,6 +171,7 @@ local State = {
     LaunchStart = 0,
     CachedInputMode = nil,
     ManualClutchOn = false,
+    LastAutoShiftSpeed = 0,
 }
 
 loadConfig()
@@ -421,21 +422,22 @@ local function actionReleaseAccelerate()
     end
 end
 
+-- FIX AUTOSHIFT: Tombol Shift Up lebih general keywordnya & klik lebih lama di Mobile
 local function actionShiftUp()
     if resolveInputMode() == "Keyboard" then
-        tapKey(Enum.KeyCode.E, 0.03)
+        tapKey(Enum.KeyCode.E, 0.04)
     else
-        local btn = findGuiByKeywords({"shift up","gear up","naik","gigi naik","up"})
-        if btn then fireClick(btn, 0.03) end
+        local btn = findGuiByKeywords({"shift up","gear up","naik","gigi","shift","gear"})
+        if btn then fireClick(btn, 0.1) end -- Naik dari 0.03 ke 0.1 biar mobile detect
     end
 end
 
 local function actionShiftDown()
     if resolveInputMode() == "Keyboard" then
-        tapKey(Enum.KeyCode.Q, 0.03)
+        tapKey(Enum.KeyCode.Q, 0.04)
     else
         local btn = findGuiByKeywords({"shift down","gear down","turun","down"})
-        if btn then fireClick(btn, 0.03) end
+        if btn then fireClick(btn, 0.1) end
     end
 end
 
@@ -448,7 +450,7 @@ local function actionEnableManualClutch()
     else
         local btn = findGuiByKeywords({"clutch mode","manual clutch","clutch toggle","mode clutch"})
         if btn then
-            fireClick(btn, 0.08)
+            fireClick(btn, 0.1)
             State.ManualClutchOn = true
             return true
         end
@@ -551,6 +553,7 @@ task.spawn(function()
             State.LaunchPhase = "idle"
             State.ManualClutchOn = false
             State.LastSpeedMethod = Config.SpeedMethod
+            State.LastAutoShiftSpeed = 0
             table.clear(State.PromptCache)
         end
     end
@@ -696,14 +699,36 @@ track(RunService.Heartbeat:Connect(function()
     end
 end))
 
+-- ============================================================
+-- FIX AUTOSHIFT (Hybrid: RPM -> Speed Fallback)
+-- ============================================================
 track(RunService.Heartbeat:Connect(function()
     if not Config.AutoShift or not State.Ready then return end
     if State.LaunchPhase ~= "idle" then return end
-    if os.clock() - State.LastGearShift < 0.5 then return end
-    local rpm, max = getRPM(); if max <= 0 then return end
-    if rpm / max >= Config.ShiftPoint then
+    if os.clock() - State.LastGearShift < 0.8 then return end -- Cooldown lebih aman buat mobile
+    
+    local rpm, max = getRPM()
+    local ratio = max > 0 and rpm / max or 0
+    
+    -- Metode 1: Shift berdasarkan RPM (Kalau mobil support)
+    if ratio >= Config.ShiftPoint and ratio > 0 then
         actionShiftUp()
         State.LastGearShift = os.clock()
+        return
+    end
+    
+    -- Metode 2: Fallback berdasarkan Kecepatan (Kalau RPM nggak kebaca / 0)
+    -- Kalau kecepatan naik 20 km/h dan gas lagi diinjek, naikin gigi
+    if State.VehicleRoot and State.VehicleRoot.Parent then
+        local currentSpeed = State.VehicleRoot.AssemblyLinearVelocity.Magnitude * Config.StudsToKmh
+        if currentSpeed > 10 and (currentSpeed - State.LastAutoShiftSpeed) >= 20 then
+            actionShiftUp()
+            State.LastGearShift = os.clock()
+            State.LastAutoShiftSpeed = currentSpeed
+        elseif currentSpeed < State.LastAutoShiftSpeed then
+            -- Reset saat melambat
+            State.LastAutoShiftSpeed = currentSpeed
+        end
     end
 end))
 
@@ -860,7 +885,6 @@ local function addESP(plr)
     if not char or not char.Parent then return end
     local hum = char:FindFirstChildOfClass("Humanoid")
     
-    -- Cleanup old ESP
     safeDestroy(State.ESPObjects[plr])
     safeDestroy(State.ESPObjects["name_" .. plr.Name])
     State.ESPObjects[plr] = nil
@@ -869,7 +893,6 @@ local function addESP(plr)
     local target = char
     local targetParent = char
     
-    -- Kalau duduk di motor/mobil, pindah target ke kendaraannya
     if hum and hum.SeatPart and hum.SeatPart.Parent then
         target = hum.SeatPart.Parent
         targetParent = target 
@@ -877,19 +900,17 @@ local function addESP(plr)
 
     if not target or not target.Parent then return end
 
-    -- 1. Highlight (Ringan & Anti Glitch)
     local hl = Instance.new("Highlight")
     hl.Name = "ESP_HL_" .. plr.Name
     hl.Adornee = target
     hl.FillColor = Config.ESPColor
     hl.OutlineColor = Config.ESPColor
-    hl.FillTransparency = 0.7 -- Lebih transparan biar ga nutupin karakter
+    hl.FillTransparency = 0.7
     hl.OutlineTransparency = 0
     hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
     hl.Parent = targetParent
     State.ESPObjects[plr] = hl
 
-    -- 2. BillboardGui (Nama, Health, Jarak)
     if Config.ESPNames or Config.ESPHealth or Config.ESPDistance then
         local bb = Instance.new("BillboardGui")
         bb.Name = "B" .. plr.Name
@@ -983,10 +1004,9 @@ local function setupPlayerESP(plr)
         end
         local hum = char:FindFirstChildOfClass("Humanoid") or char:WaitForChild("Humanoid", 5)
         if hum then
-            -- Pindahin ESP target otomatis pas orang naik / turun motor
             track(hum.Seated:Connect(function()
                 if Config.ESP then
-                    task.wait(0.2) -- Delay dikit biar game sempet update SeatPart
+                    task.wait(0.2)
                     addESP(plr)
                 end
             end))
@@ -2771,6 +2791,7 @@ track(LP.CharacterAdded:Connect(function()
     teardownLinearVelocity()
     State.LaunchPhase = "idle"
     State.ManualClutchOn = false
+    State.LastAutoShiftSpeed = 0
     Teleport.LastScan = 0
     Teleport.ScanCache = {}
     LandmarkCache.t = 0
