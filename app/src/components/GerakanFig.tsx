@@ -1,10 +1,11 @@
 import { useMemo } from 'react'
-import { figMarkup, hasPose } from '../lib/fig'
+import { figFrameMarkup, figMarkup, hasPose } from '../lib/fig'
 
 interface Props {
   id: string
   /** animasikan fase awal -> akhir */
   animate?: boolean
+  phase?: 'a' | 'b'
   /** lebar dalam px; tinggi ikut rasio 120:130 */
   size?: number
   className?: string
@@ -16,8 +17,11 @@ interface Props {
  * Ilustrasi stick-man satu gerakan. SVG-nya digenerate dari poses.json,
  * jadi tajam di semua ukuran dan ikut tema terang/gelap.
  */
-export function GerakanFig({ id, animate = false, size = 120, className, label }: Props) {
-  const html = useMemo(() => figMarkup(id, { animate }), [id, animate])
+export function GerakanFig({ id, animate = false, phase, size = 120, className, label }: Props) {
+  const html = useMemo(
+    () => phase ? figFrameMarkup(id, phase) : figMarkup(id, { animate }),
+    [id, animate, phase],
+  )
 
   if (!html) return null
 
@@ -40,21 +44,29 @@ export function GerakanFig({ id, animate = false, size = 120, className, label }
 /** Panel besar untuk layar Detail / Player. */
 export function GerakanFigPanel({
   id,
-  animate = true,
   label,
 }: {
   id: string
-  animate?: boolean
   label?: string
 }) {
   if (!hasPose(id)) return null
   return (
     <div className="gfig-panel">
       <div className="gfig-grid" aria-hidden="true" />
-      <GerakanFig id={id} animate={animate} size={168} label={label} />
+      <div className="gfig-steps" role="img" aria-label={label ?? 'Posisi awal lalu posisi akhir'}>
+        <div className="gfig-step">
+          <span className="gfig-step-label"><b>1</b> MULAI</span>
+          <GerakanFig id={id} phase="a" size={106} />
+        </div>
+        <span className="gfig-step-arrow" aria-hidden="true">→</span>
+        <div className="gfig-step">
+          <span className="gfig-step-label"><b>2</b> AKHIR</span>
+          <GerakanFig id={id} phase="b" size={106} />
+        </div>
+      </div>
       <div className="gfig-hint">
         <span className="gfig-dot" />
-        gerak: awal ke akhir
+        mulai 1 → gerak ke 2 → kembali perlahan
       </div>
     </div>
   )

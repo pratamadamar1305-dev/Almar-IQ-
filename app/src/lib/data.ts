@@ -29,9 +29,9 @@ const senin: Sesi = {
           targetArea: 'Bahu Depan',
           detikPerRep: 4,
           cara:
-            'Posisi huruf V terbalik, pantat di atas, tangan & kaki lurus, tangan selebar bahu. Tekuk siku pelan turunin kepala hampir ke lantai, dorong naik. Buang napas pas dorong.',
+            'Posisi huruf V terbalik: tangan di lantai selebar bahu dan pinggul di atas. Tekuk siku perlahan; arahkan kepala ke lantai di antara tangan. Dorong lantai sampai siku lurus lagi. Minta orang dewasa melihat punggungmu.',
           salah:
-            'Pinggang melengkung / siku lebar ke samping. Harus siku 45° ke belakang. Kalau berat, tekuk kaki dikit gapapa.',
+            'Jangan biarkan punggung melengkung atau siku membuka lurus ke samping. Arahkan siku serong ke belakang. Jika terasa sakit, berhenti.',
         }),
         g({
           id: 'senin-press',
@@ -69,8 +69,8 @@ const senin: Sesi = {
           targetArea: 'Triceps',
           detikPerRep: 3,
           cara:
-            'Push-up tangan di bawah dada bentuk diamond (jempol & telunjuk ketemu). Turun dada dekat tangan, dorong naik.',
-          salah: 'Pantat naik / badan bengkok. Lutut nempel lantai GAPAPA, badan tetap lurus kayak papan.',
+            'Mulai dengan tangan di lantai dekat bawah dada; ibu jari dan telunjuk membentuk segitiga kecil. Jaga badan lurus. Tekuk siku perlahan, lalu dorong lantai untuk kembali ke atas. Boleh mulai dengan lutut menyentuh alas.',
+          salah: 'Jangan biarkan pinggul turun atau pantat terlalu tinggi. Jangan paksa jari atau pergelangan; berhenti jika terasa sakit.',
         }),
         g({
           id: 'senin-wrist-twist',
@@ -138,8 +138,8 @@ const senin: Sesi = {
           alat: 'bodyweight',
           targetArea: 'Kuda-kuda',
           cara:
-            'Kaki buka 2x bahu, ujung keluar, jongkok paha sejajar lantai, punggung tegak, tangan pasang depan. Taruh sapu di paha buat cek rata. Tahan, napas biasa!',
-          salah: 'Punggung bungkuk / paha nggak rata. Pakai sapu di paha buat cek.',
+            'Berdiri dengan kaki lebih lebar dari bahu dan ujung kaki sedikit mengarah keluar. Tekuk lutut, turunkan pinggul sedikit, lalu tegakkan badan dan angkat tangan ke depan. Tahan sambil bernapas biasa; jangan memaksa turun terlalu rendah.',
+          salah: 'Jangan biarkan lutut jatuh ke dalam atau punggung membungkuk. Kalau keseimbangan hilang atau terasa sakit, berdiri dan istirahat.',
           catatan: 'Target: 30–40 detik per set',
         }),
         g({
@@ -165,10 +165,10 @@ const senin: Sesi = {
 const selasa: Sesi = {
   day: 'selasa',
   label: 'Selasa',
-  tema: 'Bikin Jari Lu Jadi Senjata',
+  tema: 'Jari, genggaman, dan keseimbangan',
   durasiMenit: 35,
   opsional: true,
-  fokus: 'Punggung, biceps, forearm, grip + keseimbangan',
+  fokus: 'Punggung, lengan, genggaman, dan keseimbangan',
   blok: [
     {
       nama: 'Blok Tarik + Grip',
@@ -234,8 +234,8 @@ const selasa: Sesi = {
           targetArea: 'Grip',
           detikPerRep: 1.5,
           cara:
-            'JINJING tas 2–3kg di 1 tangan, jalan pelan punggung tegak, bahu jangan miring. Ganti tangan tiap putaran.',
-          salah: 'Bahu miring / badan miring. Genggam kuat, punggung tegak.',
+            'Pegang tas ringan di satu tangan dan biarkan menggantung di samping paha. Berdiri tegak, bahu tetap rata, lalu berjalan pelan. Ganti tangan setelah selesai.',
+          salah: 'Jangan miringkan badan atau bahu untuk menahan tas. Jika tas membuat badan miring, kosongkan atau hentikan latihan.',
           catatan: '30 langkah per set',
         }),
         g({
@@ -312,8 +312,8 @@ const kamis: Sesi = {
           targetArea: 'Bahu Belakang',
           detikPerRep: 3,
           cara:
-            'Bungkuk 45°, pegang sapu lebar 2 tangan, angkat ke samping sampai bahu kayak sayap, turun pelan.',
-          salah: 'Punggung bungkuk. Punggung lurus, angkat pakai otot punggung.',
+            'Berdiri, tekuk lutut sedikit, lalu condongkan badan dari pinggul dengan punggung lurus. Pegang sapu lebar di depan badan. Buka kedua siku ke samping sampai sejajar bahu, lalu turunkan perlahan.',
+          salah: 'Jangan membulatkan punggung, mengayun badan, atau mengangkat siku lebih tinggi dari bahu. Hentikan jika terasa sakit.',
         }),
         g({
           id: 'kamis-floor-press',
@@ -338,8 +338,8 @@ const kamis: Sesi = {
           targetArea: 'Bahu',
           detikPerRep: 4,
           cara:
-            'Pegang sapu super lebar, angkat dari depan lewat atas ke belakang tanpa nekuk siku, balik lagi. Pelan!',
-          salah: 'Siku nekuk / maksa. Sakit? Lebarin pegangan lagi.',
+            'Pegang sapu dengan dua tangan jauh satu sama lain. Angkat perlahan dari depan, lewat atas kepala, lalu sejauh yang nyaman ke belakang. Kembalikan lewat atas ke depan.',
+          salah: 'Jangan menekuk siku atau memaksa bahu. Jika sapu tidak bisa lewat tanpa sakit, hentikan dan minta orang dewasa membantu.',
         }),
         g({
           id: 'kamis-overhead-ext',
@@ -351,8 +351,8 @@ const kamis: Sesi = {
           targetArea: 'Triceps',
           detikPerRep: 3,
           cara:
-            'Duduk/berdiri, pegang tas di atas kepala 2 tangan, tekuk siku turunin tas ke belakang leher pelan, lurusin lagi.',
-          salah: 'Siku melebar. Siku jangan melebar, rapat ke atas.',
+            'Berdiri atau duduk tegak, pegang tas ringan dengan dua tangan di atas kepala. Tekuk siku perlahan dan turunkan tas ke belakang kepala. Luruskan siku untuk mengangkat tas kembali. Minta orang dewasa menjaga tas tetap aman.',
+          salah: 'Jangan melengkungkan punggung atau menurunkan tas terlalu jauh. Jika bahu atau siku terasa sakit, berhenti.',
         }),
         g({
           id: 'kamis-putar-tangkisan',
@@ -365,8 +365,8 @@ const kamis: Sesi = {
           targetArea: 'Pergelangan',
           detikPerRep: 2,
           cara:
-            'Siku nempel pinggang 90°, pegang sapu vertikal, putar telapak atas ke bawah. Gerakan buang tendangan!',
-          salah: 'Siku lepas dari pinggang. Siku nempel pinggang terus.',
+            'Berdiri tegak. Pegang sapu vertikal di samping badan dengan satu tangan, siku ditekuk dan dekat pinggang. Putar lengan bawah perlahan ke dalam, lalu kembali ke posisi awal. Ulangi di sisi lain.',
+          salah: 'Jangan memutar seluruh badan atau memaksa pergelangan. Gerakkan pelan; berhenti jika terasa sakit.',
           catatan: '10x per sisi',
         }),
         g({
@@ -422,8 +422,8 @@ const kamis: Sesi = {
           alat: 'sapu',
           targetArea: 'Kaki + Koordinasi',
           detikPerRep: 2,
-          cara: 'Sapu di lantai, lompat 2 kaki bolak-balik cepat tanpa injak sapu.',
-          salah: 'Mendarat keras / injak sapu. Mendarat pakai ujung kaki, pelan.',
+          cara: 'Letakkan sapu rata di lantai sebagai garis. Berdiri di satu sisi, tekuk lutut sedikit, lalu lompat kecil melewati sapu dengan dua kaki. Mendarat pelan dengan lutut lentur, lalu kembali dengan langkah kecil.',
+          salah: 'Jangan melompat tinggi, mendarat kaku, atau memakai sapu licin/bergulir. Lakukan hanya dengan lantai kering dan orang dewasa mendampingi.'
         }),
         g({
           id: 'kamis-drill',

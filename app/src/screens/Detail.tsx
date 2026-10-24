@@ -149,7 +149,7 @@ export default function Detail({ day }: { day: DayId }) {
                         <GerakanFigPanel id={ger.id} label={`Ilustrasi ${ger.nama}`} />
                       </div>
                       <div className="ger-text">
-                        <b>Cara:</b> {ger.cara}
+                        <b>Cara (ikuti gambar 1 → 2):</b> {ger.cara}
                       </div>
                       {ger.salah && (
                         <div className="warn-box">

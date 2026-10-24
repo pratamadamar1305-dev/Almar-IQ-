@@ -28,6 +28,7 @@ export interface Pose {
   t2?: Pt // ujung kaki jauh
   br?: [Pt, Pt] // sapu
   tas?: [number, number, number, number] // tas: x, y, w, h
+  tasBehind?: number // tas digambar di belakang tubuh
   mv?: [Pt, Pt, Pt] // panah gerak: dari, ke, kontrol
   mat?: number
   wall?: number
@@ -255,9 +256,10 @@ export function poseFig(a: Pose, b?: Pose): string {
     `<g class="fig-bg">${scenery(a)}</g>`,
     `<g class="fig-far" stroke-linecap="round" stroke-linejoin="round">${far.join('')}${farJoints.join('')}</g>`,
     a.brBehind ? bar : '',
+    a.tasBehind ? bag : '',
     `<g class="fig-near" stroke-linecap="round" stroke-linejoin="round">${body}<g class="fig-neck">${neck}</g>${nearCore.join('')}${joints.join('')}${face}</g>`,
     a.brBehind ? '' : bar,
-    bag,
+    a.tasBehind ? '' : bag,
     a.mv ? `<g class="fig-mv">${arrow(a.mv)}</g>` : '',
   ]
     .filter(Boolean)
@@ -272,6 +274,13 @@ export function frameOf(id: string, frame: 'a' | 'b'): Pose | null {
 
 export function hasPose(id: string): boolean {
   return !!POSE[id]
+}
+
+/** Render satu tahap statis agar posisi awal dan akhir mudah dibandingkan. */
+export function figFrameMarkup(id: string, frame: 'a' | 'b'): string {
+  const x = POSE[id]
+  if (!x) return ''
+  return poseFig(x[frame] ?? x.a)
 }
 
 export interface FigOpts {
@@ -320,20 +329,27 @@ export const FIG_CSS = `
 .gfig .fig-mv .fig-arc{fill:none;stroke:var(--fig-accent);stroke-dasharray:3 3.4;stroke-linecap:round;opacity:.8}
 .gfig .fig-mv .fig-arc-head{fill:none;stroke:var(--fig-accent);stroke-linecap:round;stroke-linejoin:round}
 
-/* panel ilustrasi */
+/* panel tahap gerakan */
 .gfig-panel{position:relative;display:flex;flex-direction:column;align-items:center;
   border-radius:18px;border:1px solid var(--line);background:var(--fig-bg);
-  padding:10px 0 8px;overflow:hidden}
+  padding:10px 4px 9px;overflow:hidden}
 .gfig-grid{position:absolute;inset:0;
   background-image:linear-gradient(var(--fig-line) 1px,transparent 1px),
     linear-gradient(90deg,var(--fig-line) 1px,transparent 1px);
   background-size:22px 22px;opacity:.5;
   mask-image:radial-gradient(circle at 50% 45%,#000 35%,transparent 78%);
   -webkit-mask-image:radial-gradient(circle at 50% 45%,#000 35%,transparent 78%)}
-.gfig-panel .gfig{position:relative;z-index:1}
+.gfig-steps{position:relative;z-index:1;display:flex;align-items:center;justify-content:center;gap:4px;width:100%}
+.gfig-step{display:flex;flex:0 1 116px;min-width:0;flex-direction:column;align-items:center}
+.gfig-step .gfig{width:100%;height:auto;max-width:106px}
+.gfig-step-label{display:flex;align-items:center;gap:5px;min-height:21px;
+  font-size:9px;font-weight:800;letter-spacing:.12em;color:var(--dim)}
+.gfig-step-label b{display:grid;place-items:center;width:15px;height:15px;border-radius:50%;
+  color:var(--fig-bg);background:var(--fig-accent);font-size:9px;letter-spacing:0}
+.gfig-step-arrow{flex:none;color:var(--fig-accent);font-size:21px;font-weight:900;line-height:1}
 .gfig-hint{position:relative;z-index:1;display:flex;align-items:center;gap:6px;
-  font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
-  color:var(--dim2);margin-top:2px}
+  font-size:10px;font-weight:700;letter-spacing:.04em;
+  color:var(--dim2);margin-top:2px;text-align:center}
 .gfig-dot{width:5px;height:5px;border-radius:50%;background:var(--fig-accent);
   animation:gfigPulse 3.2s ease-in-out infinite}
 @keyframes gfigPulse{0%,40%{opacity:1}50%,90%{opacity:.35}100%{opacity:1}}
