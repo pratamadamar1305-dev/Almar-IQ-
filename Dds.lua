@@ -1,6 +1,5 @@
--- Drag Drive Simulator — v2.6 (Final Build)
--- Fix: UI toggle (FAB hides when panel open, X button shows FAB, hotkey syncs)
--- Stealth: No print/warn, no firesignal, marker-based GUI cleanup
+-- Drag Drive Simulator — v2.7 (ESP Highlight Fix)
+-- Fix: BoxHandleAdornment dihapus -> Highlight. Karakter ga glitch, motor ke-detect.
 -- Target: Roblox (Delta PC + Delta Mobile / Arceus / Krnl / Wave / Xeno)
 
 if _G.DDS_Connections then
@@ -834,34 +833,54 @@ track(RunService.RenderStepped:Connect(function()
     cam.CFrame = cam.CFrame:Lerp(targetCF, math.clamp(Config.CameraLerpAlpha, 0.05, 1))
 end))
 
+-- ============================================================
+-- ESP (Highlight Fix)
+-- ============================================================
 local function clearESP()
-    for _, o in pairs(State.ESPObjects) do if o and o.Parent then o:Destroy() end end
+    for _, o in pairs(State.ESPObjects) do 
+        if o and o.Parent then o:Destroy() end 
+    end
     table.clear(State.ESPObjects)
 end
 
 local function addESP(plr)
     if plr == LP or not Config.ESP then return end
-    local char = plr.Character; if not char then return end
-    local hrp = char:FindFirstChild("HumanoidRootPart"); if not hrp then return end
+    local char = plr.Character
+    if not char then return end
     local hum = char:FindFirstChildOfClass("Humanoid")
-    local old = State.ESPObjects[plr]; if old and old.Parent then old:Destroy() end
+    
+    -- Hapus ESP lama kalau ada
+    local old = State.ESPObjects[plr]
+    if old and old.Parent then old:Destroy() end
     local oldName = State.ESPObjects["name_" .. plr.Name]
     if oldName and oldName.Parent then oldName:Destroy() end
 
-    local box = Instance.new("BoxHandleAdornment")
-    box.Name = "A" .. plr.Name
-    box.Adornee = hrp; box.AlwaysOnTop = true; box.ZIndex = 5
-    box.Size = hrp.Size + Vector3.new(0.4, 0.4, 0.4)
-    box.Color3 = Config.ESPColor; box.Transparency = 0.35
-    box.Parent = hrp
-    State.ESPObjects[plr] = box
+    -- 1. Tentukan target: Motor/Mobil atau Karakter?
+    local target = char
+    if hum and hum.SeatPart and hum.SeatPart.Parent then
+        target = hum.SeatPart.Parent -- Highlight kendaraannya, bukan orangnya
+    end
 
+    -- 2. Pasang Highlight (Ringan & Anti Glitch)
+    local hl = Instance.new("Highlight")
+    hl.Name = "ESP_HL_" .. plr.Name
+    hl.Adornee = target
+    hl.FillColor = Config.ESPColor
+    hl.OutlineColor = Config.ESPColor
+    hl.FillTransparency = 0.6
+    hl.OutlineTransparency = 0
+    hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    hl.Parent = char
+    State.ESPObjects[plr] = hl
+
+    -- 3. BillboardGui (Nama, Health, Jarak)
     if Config.ESPNames or Config.ESPHealth or Config.ESPDistance then
         local bb = Instance.new("BillboardGui")
         bb.Name = "B" .. plr.Name
-        bb.Adornee = hrp; bb.AlwaysOnTop = true
+        bb.Adornee = target 
+        bb.AlwaysOnTop = true
         bb.Size = UDim2.new(0, 160, 0, 46)
-        bb.StudsOffset = Vector3.new(0, 3, 0)
+        bb.StudsOffset = Vector3.new(0, 3, 0) -- Offset dari atap kendaraan/kepala
 
         local nameLbl = Instance.new("TextLabel")
         nameLbl.Name = "N"
@@ -891,10 +910,9 @@ local function addESP(plr)
         dl.TextSize = 11; dl.TextStrokeTransparency = 0.4
         dl.Text = "-"; dl.Visible = Config.ESPDistance; dl.Parent = bb
 
-        bb.Parent = hrp
+        bb.Parent = char
         State.ESPObjects["name_" .. plr.Name] = bb
-        State.ESPObjects["hrp_" .. plr.Name] = hrp
-        State.ESPObjects["hum_" .. plr.Name] = hum
+        State.ESPObjects["hrp_" .. plr.Name] = target -- Simpan target untuk kalkulasi jarak
     end
 end
 
@@ -903,31 +921,38 @@ track(RunService.RenderStepped:Connect(function()
     local lpChar = LP.Character
     local lpHrp = lpChar and lpChar:FindFirstChild("HumanoidRootPart")
     local lpPos = lpHrp and lpHrp.Parent and lpHrp.Position
+    
     for key, bb in pairs(State.ESPObjects) do
         if type(key) == "string" and key:sub(1, 5) == "name_" then
             local plrName = key:sub(6)
             if bb and bb.Parent then
-                local hum = State.ESPObjects["hum_" .. plrName]
-                local hrp = State.ESPObjects["hrp_" .. plrName]
+                local targetPart = State.ESPObjects["hrp_" .. plrName]
+                local plr = Players:FindFirstChild(plrName)
+                local hum = plr and plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
+                
+                -- Update Health
                 local hb = bb:FindFirstChild("H")
                 if hb then
                     local bar = hb:FindFirstChild("P")
                     if bar and hum then
-                        local okH, h = pcall(function() return hum.Health end)
-                        local okM, m = pcall(function() return hum.MaxHealth end)
-                        if okH and okM then
-                            local pct = math.clamp(h / math.max(m, 1), 0, 1)
-                            bar.Size = UDim2.new(pct, 0, 1, 0)
-                            bar.BackgroundColor3 = Color3.fromRGB(
-                                math.floor(255 * (1 - pct)), math.floor(255 * pct), 50)
-                        end
+                        local pct = math.clamp(hum.Health / math.max(hum.MaxHealth, 1), 0, 1)
+                        bar.Size = UDim2.new(pct, 0, 1, 0)
+                        bar.BackgroundColor3 = Color3.fromRGB(
+                            math.floor(255 * (1 - pct)), math.floor(255 * pct), 50)
                     end
                 end
+                
+                -- Update Jarak (kalau targetnya motor, jarak ngikutin motor)
                 local dl = bb:FindFirstChild("D")
-                if dl and hrp and hrp.Parent and lpPos then
-                    local okP, hrpPos = pcall(function() return hrp.Position end)
-                    if okP and hrpPos then
-                        dl.Text = string.format("%d studs", math.floor((hrpPos - lpPos).Magnitude))
+                if dl and targetPart and targetPart.Parent and lpPos then
+                    local targetPos = nil
+                    if targetPart:IsA("BasePart") then
+                        targetPos = targetPart.Position
+                    elseif targetPart:IsA("Model") and targetPart.PrimaryPart then
+                        targetPos = targetPart.PrimaryPart.Position
+                    end
+                    if targetPos then
+                        dl.Text = string.format("%d studs", math.floor((targetPos - lpPos).Magnitude))
                     end
                 end
             end
