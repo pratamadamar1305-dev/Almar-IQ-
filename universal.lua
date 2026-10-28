@@ -1,676 +1,522 @@
 --!strict
--- language: Lua (Luau), Roblox executor LocalScript, target: Android (Delta / Fluxus / Arceus X)
--- Requires: Drawing API, Rayfield, writefile/readfile (optional for scan cache)
--- Auto-scans track for path nodes -> generates RRR3-style racing line -> autopilot ready.
--- No manual recording required: tap SCAN, line appears, autopilot can engage.
-
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local CollectionService = game:GetService("CollectionService")
-local HttpService = game:GetService("HttpService")
-
-local lp = Players.LocalPlayer
-local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
-
--- ─── types ──────────────────────────────────────────────────────
-type Vec3 = Vector3
-type Vehicle = { seat: VehicleSeat, position: Vec3 }
-type SplinePoint = { pos: Vec3, speed: number }
-type Preset = { amp: number, look: number, thr: number, wet: number }
-
--- ─── constants ─────────────────────────────────────────────────
-local NAME_PATTERNS: {string} = {
-    "^%s*[Ww]aypoint", "^%s*[Cc]heckpoint", "^%s*[Cc][Pp]%d",
-    "^%s*[Nn]ode",     "^%s*[Rr]oute",      "^%s*[Pp]ath",
-    "^%s*[Mm]arker",   "^%s*[Gg]ate",       "^%s*[Ff]inish",
-}
-
-local TAG_CANDIDATES: {string} = {
-    "Checkpoint", "Waypoint", "Node", "Route", "Path", "TrackNode", "RaceNode",
-}
-
-local ATTR_CANDIDATES: {string} = {
-    "CheckpointNumber", "WaypointIndex", "Order", "Index", "Number", "LapNumber",
-}
-
-local PRESETS: {[string]: Preset} = {
-    ["Pine Forest"]      = { amp = 8,  look = 8,  thr = 12, wet = 1.00 },
-    ["Alpine Pass"]      = { amp = 12, look = 11, thr = 16, wet = 0.85 },
-    ["Frozen Lake"]      = { amp = 5,  look = 13, thr = 10, wet = 0.70 },
-    ["Costa Limone"]     = { amp = 10, look = 10, thr = 14, wet = 0.80 },
-    ["Sakura Pass"]      = { amp = 9,  look = 9,  thr = 13, wet = 0.90 },
-    ["Riverbend Canyon"] = { amp = 14, look = 12, thr = 15, wet = 0.90 },
-}
-
-local SPS = 8                    -- Catmull-Rom samples per segment
-local NEAREST_WINDOW = 60        -- local search radius in spline points
-local FAR_JUMP = 500             -- studs — trigger full rescan of spline
-local MAX_WAYPOINTS = 2000       -- cap manual add growth
-local SCAN_COOLDOWN = 1.5        -- seconds between SCAN taps
-local SCAN_YIELD_EVERY = 200     -- parts scanned before task.wait()
-
--- ─── state ─────────────────────────────────────────────────────
-local waypoints: {Vec3} = {}
-local spline: {SplinePoint} = {}
-local drawings: {any} = {}
-local autopilot: boolean = false
-local lookahead: number = 9
-local amp: number = 10
-local curveThresh: number = math.rad(13)
-local wetFactor: number = 1.0
-local useGenerated: boolean = true
-local reverseDirection: boolean = false
-local lastSplineIdx: number = 1
-local lastScanAt: number = 0
-local connections: {RBXScriptConnection} = {}
-local currentStage: string = "Pine Forest"
-
--- ─── vehicle accessor ──────────────────────────────────────────
-local function getVehicle(): Vehicle?
-    local char = lp.Character
-    if not char or not char.Parent then return nil end
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if not hum then return nil end
-    local seat = hum.SeatPart
-    if not seat or not seat.Parent then return nil end
-    local model = seat:FindFirstAncestorOfClass("Model")
-    local prim = (model and (model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart")))
-        or seat
-    if not prim or not prim.Parent then return nil end
-    return { seat = seat, position = prim.Position }
+-- JF Universal Hub v16.3 — FULL MERGED FINAL (all boosts integrated)
+local Rayfield=loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
+local Window=Rayfield:CreateWindow({Name="JF v16.3",LoadingTitle="JF v16.3",LoadingSubtitle="final",ConfigurationSaving={Enabled=true,FolderName="JFv16",FileName="config"},KeySystem=false})
+local Players,RS,WS=game:GetService("Players"),game:GetService("ReplicatedStorage"),game:GetService("Workspace")
+local RunSvc,UIS,HS=game:GetService("RunService"),game:GetService("UserInputService"),game:GetService("HttpService")
+local VU,TS=game:GetService("VirtualUser"),game:GetService("TeleportService")
+local LP=Players.LocalPlayer
+local Remotes=RS:WaitForChild("Remotes",30) if not Remotes then error("Not Blox Fruits") end
+local CommF=Remotes:WaitForChild("CommF_",30) if not CommF then error("CommF_ missing") end
+local Drawing=nil do local ok,d=pcall(function() return rawget(getfenv(),"Drawing") end) if ok and d then Drawing=d end end
+local VIM=nil do local ok,v=pcall(function() return game:GetService("VirtualInputManager") end) if ok then VIM=v end end
+local function notify(m,d) pcall(function() Rayfield:Notify({Title="JF",Content=tostring(m),Duration=d or 4}) end) end
+local function safePara(tab,t,c) local ok=pcall(function() tab:CreateParagraph({Title=t,Content=c}) end) if not ok then pcall(function() tab:CreateSection(t) end) end end
+local PLACE_ID=2753915549
+local SERVER_LIST_URL="https://games.roblox.com/v1/games/"..PLACE_ID.."/servers/Public?sortOrder=Asc&limit=100"
+local NPC_TTL=5
+local RAID_CF={[1]=CFrame.new(0,10,0),[2]=CFrame.new(2000,10,0),[3]=CFrame.new(0,10,2000),[4]=CFrame.new(2000,10,2000),[5]=CFrame.new(4000,10,0)}
+local GH_STYLES={"Black Leg","Dark Step","Water Kung Fu","Superhuman","Death Step","Electric Claw","Sharkman Karate","Dragon Breath","Dragon Talon"}
+local GH_ISLANDS={{name="Bandit",min=1,cf=CFrame.new(1080,15,1150)},{name="Marine",min=200,cf=CFrame.new(-2800,60,-2000)},{name="Prison",min=500,cf=CFrame.new(-4000,20,-2000)},{name="CursedShip",min=1000,cf=CFrame.new(4000,30,800)},{name="IceCastle",min=1200,cf=CFrame.new(-5000,60,4000)},{name="CakeLand",min=1500,cf=CFrame.new(-1500,20,-1000)},{name="HauntedCastle",min=2000,cf=CFrame.new(-9500,150,6000)}}
+local FRUIT_NAMES={"Rocket","Spin","Chop","Spring","Bomb","Smoke","Spike","Flame","Falcon","Ice","Sand","Dark","Diamond","Light","Rubber","Barrier","Ghost","Magma","Door","Revive","Blizzard","Gravity","Quake","Buddha","Love","Spider","Sound","Phoenix","Rumble","Paw","Portal","String","Pain","Blade","Dough","Shadow","Venom","Control","Spirit","Dragon","Leopard","Kitsune","Mammoth","T-Rex","Gas","Yeti","Creation","Eagle"}
+local TORCH_ORDER={CFrame.new(-1200,50,-800),CFrame.new(-1300,50,-900),CFrame.new(-1100,60,-700),CFrame.new(-1400,50,-1000),CFrame.new(-1250,55,-850)}
+local DRACO_CF={[1]=CFrame.new(-9500,150,6000),[2]=CFrame.new(-5000,100,-4000),[3]=CFrame.new(5500,50,-6500),[4]=CFrame.new(5500,50,-6500)}
+local BOSS_QUEUE={"DoughKing","rip_indra","Soul Reaper","Cake Prince","Tyrant of the Skies","Longma","Cursed Skeleton","Elite Pirate"}
+local RACE_V3_ATTRS={"RaceV3","RaceV3Done","RaceV3Complete","TrialV3","RaceStage","RaceProgress","V3Done","V3Complete","RaceLevel","TrialStage"}
+local RACE_V4_ATTRS={"RaceV4","RaceV4Done","RaceV4Complete","TrialV4","V4Done","V4Complete","RaceAwaken","RaceAwakened"}
+local RACE_V2_ATTRS={"RaceV2","RaceV2Done","RaceV2Complete","TrialV2","V2Done"}
+local CDK_ATTRS={"CDKPhase","CDKProgress","CDKStage","CursedKatanaPhase","CDKTrial"}
+local V4_TITLES={Human="Berserker",Rabbit="Thunderbolt",Shark="Leviathan",Angel="His Majesty",Ghoul="Nightwalker",Cyborg="Genesis",Draco="Primordial Guardian"}
+local function isFruit(n) local l=n:lower() for _,f in ipairs(FRUIT_NAMES) do if l:find(f:lower(),1,true) then return true end end return false end
+local function isDrop(n) local l=n:lower() return l:find("mirror",1,true) or l:find("fractal",1,true) or l:find("chalice",1,true) or l:find("blue gear",1,true) or l:find("red gear",1,true) or l:find("flower",1,true) or l:find("dragon egg",1,true) or l:find("fragment",1,true) or l:find("bone",1,true) end
+local function isBerry(n) return n:lower():find("berry",1,true)~=nil end
+local function isFlower(n) return n:lower():find("flower",1,true)~=nil end
+local function isGear(n) local l=n:lower() if not l:find("gear",1,true) then return false end return l:find("blue",1,true) or l:find("red",1,true) or l:find("mirage",1,true) end
+local function isChalice(n) return n:lower():find("chalice",1,true)~=nil end
+local S={autofarm=false,mob="Bandit",autoQuest=true,questName="",autoRaid=false,autoChip=false,raidIsland=1,fruitSniper=false,fruitHop=false,killAura=false,kaRange=45,fastAttack=false,fastDelay=0.05,aimbot=false,aimFov=200,autoSkill=false,skillKey="Z",autoBuso=false,autoKen=false,autoDodge=false,dodgeKey="Q",hitbox=false,hitboxSize=10,mobBring=false,espEnemy=false,espFruit=false,espChest=false,espPlayer=false,walkSpeed=16,jumpPower=50,infJump=false,noclip=false,fly=false,flySpeed=50,waterWalk=false,autoStats=false,statTarget="Melee",antiAfk=false,ghGrind=false,ghTarget=400,_ghLastIsland=nil,silentAim=false,skillAimbot=false,aimPrediction=0.15,autoCombo=false,comboDelay=0.15,comboSkills={"Z","X","C","V"},bountyHunter=false,autoRetaliate=false,invisible=false,antiAim=false,agRunning=false,autoRaceV2=false,autoRaceV3=false,autoRaceV4=false,autoDracoV4=false,raceV3Target="Human",_tx=0,_ty=10,_tz=0,_lastKaSwing=0,_lastSkillFire=0,_lastHealth=nil,_waterPlatform=nil,_flyBV=nil}
+local V7={dracoV1=false,dracoV2=false,dracoV3=false,dracoV4=false,relicTrial=false,trainingV4=false,prehistoric=false,volcano=false,dinoBones=false,dragonEggs=false,autoFish=false,autoSellFish=false,seaEvent=false,autoSail=false,shipNoclip=false,shipSpeed=false,autoFactory=false,factoryRaid=false,autoDungeon=false,skullGuitar=false,obsV2=false,rainbowHaki=false,autoBuyFruit=false,cheapestFruit=false,autoGun=false,autoAccessory=false,autoMaterial=false,autoReroll=false,smartWeapon=false,antiBan=false,panicKey="P",fovValue=70,showDashboard=false,_tpName="",_dash=nil,_dashCreated=false,_dashFrames=0,_dashLastSec=os.clock(),_dashFps=0,_fovConn=nil,_pingCache=0,_pingTime=0,_antiBanSaved=nil}
+local V8={autoHolyTorch=false,autoTushita=false,autoYama=false,autoCDK=false,autoHaze=false,autoBossDrop=false,autoFSCascade=false,autoLowHop=false,autoFruitSniper=false,_hopCooldown=0,_agFruit=nil,_agDrop=nil,_agChest=nil,_agBerry=nil,_agFlower=nil,_agGear=nil,_agChalice=nil}
+local V9={_routes={},_recording=false,_recordBuf={},_recordStart=0,_recordName="",_playing=false,_checkpoint={}}
+local V10={masterAuto=false,masterBossFarm=false,masterFruitFarm=false,_status="idle",_cycle=0,_maxCycle=30,_retryCount=0}
+local _detected={v3=nil,v4=nil,v2=nil,cdk=nil}
+local _runningLoops={}
+local function startLoop(key,fn)
+    if _runningLoops[key] then return false end
+    _runningLoops[key]=true
+    task.spawn(function() local ok,err=pcall(fn) if _runningLoops[key] then _runningLoops[key]=nil end if not ok then warn("[JF]"..key..": "..tostring(err)) end end)
+    return true
 end
-
--- ─── scan: name + tag matching ────────────────────────────────
-local function matchesPattern(name: string): boolean
-    for _, pat in ipairs(NAME_PATTERNS) do
-        if name:match(pat) then return true end
+local function hrp() local c=LP.Character return c and c:FindFirstChild("HumanoidRootPart") end
+local function hum() local c=LP.Character return c and c:FindFirstChildOfClass("Humanoid") end
+local function enemiesFolder() return WS:FindFirstChild("Enemies") end
+local function equip(cls)
+    local bp=LP:FindFirstChild("Backpack") local ch=LP.Character if not bp or not ch then return nil end
+    local cl=cls and cls:lower() or nil
+    local function m(t) if not t:IsA("Tool") then return false end if not cl then return true end local tip=tostring(t.ToolTip or ""):lower() if tip:find(cl,1,true) then return true end return t.Name:lower():find(cl,1,true)~=nil end
+    for _,c in ipairs(ch:GetChildren()) do if m(c) then return c end end
+    for _,c in ipairs(bp:GetChildren()) do if m(c) then c.Parent=ch return c end end
+    return nil
+end
+local function swing(tool) tool=tool or equip("sword") or equip("melee") or equip("gun") if tool and tool:FindFirstChild("Click") then pcall(function() tool.Click:FireServer("Down") end) task.wait(0.03) pcall(function() tool.Click:FireServer("Up") end) end end
+local function sendKey(k) if not VIM then return end pcall(function() VIM:SendKeyEvent(true,k,false,game) task.wait(0.03) VIM:SendKeyEvent(false,k,false,game) end) end
+local function useSkill(k) local c=LP.Character if not c or not c:FindFirstChildOfClass("Tool") then return end sendKey(k) end
+local _npcCache={} local _npcCacheTime=0
+local function findNPC(name)
+    local now=os.clock()
+    if now-_npcCacheTime>NPC_TTL then
+        _npcCache={} _npcCacheTime=now
+        local function collect(r) for _,v in ipairs(r:GetChildren()) do if v:IsA("Model") and v:FindFirstChild("HumanoidRootPart") and v:FindFirstChildOfClass("Humanoid") then local k=v.Name:lower() if not _npcCache[k] then _npcCache[k]={} end table.insert(_npcCache[k],v) end end end
+        collect(WS)
+        for _,fn in ipairs({"NPCs","Characters"}) do local f=WS:FindFirstChild(fn) if f then collect(f) end end
+    end
+    local k=name:lower()
+    for kk,list in pairs(_npcCache) do
+        if kk:find(k,1,true) then for i=#list,1,-1 do if not list[i].Parent then table.remove(list,i) end end if #list>0 then return list[1] end end
+    end
+    return nil
+end
+local function findNPCAny(names) for _,n in ipairs(names) do local r=findNPC(n) if r then return r end end return nil end
+local function tpTo(obj) local h=hrp() if not h or not obj then return end local pos if obj:IsA("BasePart") then pos=obj.Position else local hr=obj:FindFirstChild("HumanoidRootPart") if hr and hr:IsA("BasePart") then pos=hr.Position end end if pos then h.CFrame=CFrame.new(pos+Vector3.new(0,3,-5)) end end
+local function firePPsNear(r) local h=hrp() if not h then return end for _,v in ipairs(WS:GetDescendants()) do if v:IsA("ProximityPrompt") and v.Enabled and v.Parent then local pos if v.Parent:IsA("BasePart") then pos=v.Parent.Position elseif v.Parent:IsA("Attachment") then pos=v.Parent.WorldPosition end if pos and (pos-h.Position).Magnitude<=r then pcall(function() fireproximityprompt(v) end) end end end end
+local function getTool(name) local ch=LP.Character if ch then local t=ch:FindFirstChild(name) if t and t:IsA("Tool") then return t end end local bp=LP:FindFirstChild("Backpack") if bp then local t=bp:FindFirstChild(name) if t and t:IsA("Tool") then return t end end return nil end
+local function readMastery(name) local t=getTool(name) if not t then return nil end for _,a in ipairs({"Mastery","mastery","MasteryLevel"}) do local v=t:GetAttribute(a) if type(v)=="number" then return v end end for _,n in ipairs({"Mastery","MasteryLevel","mastery"}) do local v=t:FindFirstChild(n) if v and v:IsA("ValueBase") and type(v.Value)=="number" then return v.Value end end local tip=tostring(t.ToolTip or "") local n=tip:match("[Mm]astery[^%d]*(%d+)") if n then return tonumber(n) end return nil end
+local function mastery(n) return readMastery(n) or 0 end
+local function playerLevel() local d=LP:FindFirstChild("Data") if d then local lv=d:FindFirstChild("Level") if lv and lv:IsA("ValueBase") then return lv.Value end end local ls=LP:FindFirstChild("leaderstats") if ls then local lv=ls:FindFirstChild("Level") if lv and lv:IsA("ValueBase") then return lv.Value end end return 1 end
+local function mobByName(n) local f=enemiesFolder() if not f then return nil end local l=n:lower() for _,v in ipairs(f:GetChildren()) do if v.Name:lower():find(l,1,true) and v:FindFirstChild("HumanoidRootPart") then return v end end return nil end
+local function nearestEnemy(r) local h=hrp() if not h then return nil,nil end local f=enemiesFolder() if not f then return nil,nil end local b=nil local bd=r or math.huge for _,v in ipairs(f:GetChildren()) do local vh=v:FindFirstChild("HumanoidRootPart") local vhm=v:FindFirstChild("Humanoid") if vh and vh:IsA("BasePart") and vhm and vhm:IsA("Humanoid") and vhm.Health>0 then local d=(vh.Position-h.Position).Magnitude if d<bd then b,bd=v,d end end end return b,bd end
+local function getPlayers() local out={} for _,p in ipairs(Players:GetPlayers()) do if p~=LP and p.Character then local vh=p.Character:FindFirstChild("HumanoidRootPart") local vhum=p.Character:FindFirstChildOfClass("Humanoid") if vh and vh:IsA("BasePart") and vhum and vhum.Health>0 then table.insert(out,{plr=p,hrp=vh,hum=vhum}) end end end return out end
+local function nearestPlayer(r) local h=hrp() if not h then return nil,nil end local b,bd=nil,r or math.huge for _,e in ipairs(getPlayers()) do local d=(e.hrp.Position-h.Position).Magnitude if d<bd then b,bd=e,d end end return b,bd end
+local function getBounty(p) local ls=p:FindFirstChild("leaderstats") if ls then local b=ls:FindFirstChild("Bounty") or ls:FindFirstChild("Honor") if b and b:IsA("ValueBase") then return b.Value end end return 0 end
+local function faceTarget(t) local h=hrp() if not h or not t then return end h.CFrame=CFrame.new(h.Position,Vector3.new(t.Position.X,h.Position.Y,t.Position.Z)) end
+local function predictedPos(t,tt) return t.Position+(t.AssemblyLinearVelocity*tt) end
+local function fireSkills(keys,delay) for _,k in ipairs(keys) do local c=LP.Character if c and c:FindFirstChildOfClass("Tool") then sendKey(k) end task.wait(delay) end end
+local function scanFolders() local out={} for _,name in ipairs({"Fruits","Drops","Chests","ChestFolderValueReference","ItemDrops","SpawnedItems"}) do local f=WS:FindFirstChild(name) if f then table.insert(out,f) end end return out end
+local function grabObject(obj) local h=hrp() if not h then return false end local pos if obj:IsA("BasePart") then pos=obj.Position else local ha=obj:FindFirstChild("Handle") local hr=obj:FindFirstChild("HumanoidRootPart") if ha and ha:IsA("BasePart") then pos=ha.Position elseif hr and hr:IsA("BasePart") then pos=hr.Position elseif obj:IsA("Model") then pos=obj:GetPivot().Position end end if not pos then return false end if (pos-h.Position).Magnitude>1000 then return false end h.CFrame=CFrame.new(pos+Vector3.new(0,3,-2)) task.wait(0.15) for _,d in ipairs(obj:GetDescendants()) do if d:IsA("ProximityPrompt") and d.Enabled then pcall(function() fireproximityprompt(d) end) end end firePPsNear(15) return true end
+local function findPart(n) for _,v in ipairs(WS:GetDescendants()) do if (v:IsA("BasePart") or v:IsA("Model")) and v.Name:lower():find(n:lower(),1,true) then return v end end return nil end
+local function islandForLevel() local lv=playerLevel() local p=GH_ISLANDS[1] for _,e in ipairs(GH_ISLANDS) do if lv>=e.min then p=e end end return p end
+local function hitNearest(radius) local h=hrp() if not h then return 0 end local f=enemiesFolder() if not f then return 0 end local hits=0 local tool=LP.Character and LP.Character:FindFirstChildOfClass("Tool") for _,v in ipairs(f:GetChildren()) do local vh=v:FindFirstChild("HumanoidRootPart") local vhm=v:FindFirstChild("Humanoid") if vh and vh:IsA("BasePart") and vhm and vhm:IsA("Humanoid") and vhm.Health>0 and (vh.Position-h.Position).Magnitude<=radius then h.CFrame=vh.CFrame*CFrame.new(0,3,-3) if tool and tool:FindFirstChild("Click") then pcall(function() tool.Click:FireServer() end) end pcall(function() mouse1click() end) for _,k in ipairs({"Z","X","C","V"}) do sendKey(k) task.wait(0.02) end hits=hits+1 task.wait(0.05) end end return hits end
+local function ownedSorted() local o={} for _,n in ipairs(GH_STYLES) do if getTool(n) then table.insert(o,n) end end table.sort(o,function(a,b) return mastery(a)<mastery(b) end) return o end
+local function waitFor(cond,timeout,pi) local s=os.clock() local i=pi or 0.15 while os.clock()-s<timeout do local ok,r=pcall(cond) if ok and r then return true end task.wait(i) end return false end
+local function safeHop() local now=os.clock() if now-V8._hopCooldown<30 then notify("hop cd "..math.ceil(30-(now-V8._hopCooldown)).."s") return end V8._hopCooldown=now pcall(function() local x=game:HttpGet(SERVER_LIST_URL) local d=HS:JSONDecode(x) if d and d.data and #d.data>0 then table.sort(d.data,function(a,b) return (a.playing or 0)<(b.playing or 0) end) TS:TeleportToPlaceInstance(PLACE_ID,d.data[1].id,LP) end end) end
+local function hopToPopulatedServer() pcall(function() local x=game:HttpGet(SERVER_LIST_URL) local d=HS:JSONDecode(x) if not d or not d.data then return end local good={} for _,s in ipairs(d.data) do local p=s.playing or 0 if p>=3 and p<=12 then table.insert(good,s) end end if #good>0 then local pick=good[math.random(1,#good)] notify("Hop → server "..pick.playing.." player") TS:TeleportToPlaceInstance(PLACE_ID,pick.id,LP) else safeHop() end end) end
+local function ensureParty(min,t) local have=#getPlayers()+1 if have>=min then return true end notify("need "..min.."p("..have..")wait "..t.."s") local ok=waitFor(function() return (#getPlayers()+1)>=min end,t) if ok then return true end notify("timeout hop") safeHop() return false end
+local function detectCompletion(attrs,cacheKey,thresh)
+    if _detected[cacheKey] then
+        local n=_detected[cacheKey]
+        local v=LP:GetAttribute(n)
+        local cv=LP:FindFirstChild(n)
+        local stillTrue=false
+        if type(v)=="number" and v>=thresh then stillTrue=true end
+        if not stillTrue and cv and cv:IsA("ValueBase") and type(cv.Value)=="number" and cv.Value>=thresh then stillTrue=true end
+        if stillTrue then return true end
+        _detected[cacheKey]=nil
+    end
+    for _,n in ipairs(attrs) do
+        local v=LP:GetAttribute(n)
+        if type(v)=="number" and v>=thresh then _detected[cacheKey]=n return true end
+        local c=LP:FindFirstChild(n)
+        if c and c:IsA("ValueBase") and type(c.Value)=="number" and c.Value>=thresh then _detected[cacheKey]=n return true end
     end
     return false
 end
-
-local function scanTrackNodes(): {BasePart}
-    local results: {BasePart} = {}
-    local found: {[Instance]: boolean} = {}
-    local scanned = 0
-
-    local function recurse(root: Instance)
-        for _, child in ipairs(root:GetChildren()) do
-            if child:IsA("BasePart") and matchesPattern(child.Name) and not found[child] then
-                found[child] = true
-                table.insert(results, child)
-            end
-            if #child:GetChildren() > 0 then
-                recurse(child)
-            end
-            scanned = scanned + 1
-            if scanned % SCAN_YIELD_EVERY == 0 then
-                task.wait()
-            end
-        end
+local function hasYama() return getTool("Yama")~=nil end
+local function hasTushita() return getTool("Tushita")~=nil end
+local function hasCDK() return getTool("Cursed Dual Katana")~=nil end
+local function hasHolyTorch() return getTool("Holy Torch")~=nil or getTool("Torch")~=nil end
+local function raceV3Complete() return detectCompletion(RACE_V3_ATTRS,"v3",3) end
+local function raceV4Complete() return detectCompletion(RACE_V4_ATTRS,"v4",1) end
+local function raceV2Complete() return detectCompletion(RACE_V2_ATTRS,"v2",1) end
+local function cdkPhaseComplete(p) if not _detected.cdk then for _,n in ipairs(CDK_ATTRS) do local v=LP:GetAttribute(n) if type(v)=="number" then _detected.cdk=n break end local c=LP:FindFirstChild(n) if c and c:IsA("ValueBase") and type(c.Value)=="number" then _detected.cdk=n break end end end if not _detected.cdk then return false end local v=LP:GetAttribute(_detected.cdk) return type(v)=="number" and v>=p end
+local function hasItemNamed(name) local ch=LP.Character if ch and ch:FindFirstChild(name) then return true end local bp=LP:FindFirstChild("Backpack") if bp and bp:FindFirstChild(name) then return true end return false end
+local function hasBlueGear() return hasItemNamed("Blue Gear") or hasItemNamed("BlueGear") end
+local function hasMirrorFractal() return hasItemNamed("Mirror Fractal") or hasItemNamed("MirrorFractal") end
+local function hasV4Title(race)
+    if type(race)~="string" then return false end
+    local want=V4_TITLES[race] if not want then return false end
+    local wl=want:lower()
+    local cs={LP}
+    for _,n in ipairs({"Data","Titles","leaderstats","PlayerData"}) do local c=LP:FindFirstChild(n) if c then table.insert(cs,c) end end
+    for _,c in ipairs(cs) do
+        for _,v in ipairs(c:GetChildren()) do if v.Name:lower()==wl then return true end end
+        local tf=c:FindFirstChild("Titles")
+        if tf then for _,v in ipairs(tf:GetChildren()) do if v.Name:lower()==wl then return true end if v:IsA("StringValue") and tostring(v.Value):lower()==wl then return true end end end
     end
-    recurse(workspace)
-
-    for _, tag in ipairs(TAG_CANDIDATES) do
-        for _, obj in ipairs(CollectionService:GetTagged(tag)) do
-            if obj:IsA("BasePart") and not found[obj] then
-                found[obj] = true
-                table.insert(results, obj)
-            end
-        end
-    end
-    return results
+    local attr=LP:GetAttribute("Title") or LP:GetAttribute("CurrentTitle") or LP:GetAttribute("EquippedTitle")
+    if type(attr)=="string" then local al=attr:lower() if al==wl or al:find(wl,1,true) then return true end end
+    local cur=LP:FindFirstChild("CurrentTitle") or LP:FindFirstChild("Title") or LP:FindFirstChild("EquippedTitle")
+    if cur and cur:IsA("ValueBase") then local cvl=tostring(cur.Value):lower() if cvl==wl or cvl:find(wl,1,true) then return true end end
+    return false
 end
+local function raceV4CompleteV3() local r=S.raceV3Target if type(r)~="string" then return false end return hasV4Title(r) end
+local function allFSBought() for _,s in ipairs({"Superhuman","Death Step","Electric Claw","Sharkman Karate","Dragon Talon","Godhuman"}) do if not getTool(s) then return false end end return true end
+local function everythingDone() return hasHolyTorch() and hasTushita() and hasYama() and hasCDK() and raceV2Complete() and raceV3Complete() and raceV4Complete() and allFSBought() end
+local function progressStr() local p={} if hasHolyTorch() then table.insert(p,"Torch") end if hasTushita() then table.insert(p,"Tushita") end if hasYama() then table.insert(p,"Yama") end if hasCDK() then table.insert(p,"CDK") end if raceV2Complete() then table.insert(p,"RV2") end if raceV3Complete() then table.insert(p,"RV3") end if raceV4Complete() then table.insert(p,"RV4") end if allFSBought() then table.insert(p,"FS") end if #p==0 then return "none" end return table.concat(p,",") end
+local Moon={full=false,lastMsgAt=0,msgSeen=false,clockTime=0,phase=nil,lastCheck=0}
+do local ok=pcall(function() local ce=RS:FindFirstChild("DefaultChatSystemChatEvents") local om=ce and ce:FindFirstChild("OnMessageDoneFiltering") if om and om:IsA("RemoteEvent") then om.OnClientEvent:Connect(function(d) local msg=tostring((d and d.Message) or "") if msg:lower():find("full moon") then Moon.lastMsgAt=os.clock() Moon.msgSeen=true Moon.full=true end end) end end) if not ok then pcall(function() game:GetService("TextChatService").MessageReceived:Connect(function(m) if tostring(m.Text or ""):lower():find("full moon") then Moon.lastMsgAt=os.clock() Moon.msgSeen=true Moon.full=true end end) end) end end
+local function refreshMoon() local now=os.clock() if now-Moon.lastCheck<1 then return end Moon.lastCheck=now local L=game:GetService("Lighting") Moon.clockTime=L.ClockTime Moon.phase=L:GetAttribute("MoonPhase") or L:GetAttribute("Moon") if Moon.msgSeen and (now-Moon.lastMsgAt)<677 then Moon.full=true return end if type(Moon.phase)=="string" and Moon.phase:lower():find("full") then Moon.full=true return end if type(Moon.phase)=="number" and (Moon.phase==4 or Moon.phase==0) then Moon.full=true return end end
+local function waitForFullMoon(timeout) local start=os.clock() while S.autoRaceV4 and (os.clock()-start)<timeout do refreshMoon() if Moon.full then return true end task.wait(2) end return false end
+local function ensureBlueGear() if hasBlueGear() then return true end notify("V4: Blue Gear MISSING") local h=hrp() if h then h.CFrame=CFrame.new(5000,100,-4000) end task.wait(1) for _=1,20 do if hasBlueGear() then return true end firePPsNear(80) task.wait(1) end return hasBlueGear() end
+local function ensureMirrorFractal() if hasMirrorFractal() then return true end notify("V4: Mirror Fractal MISSING") return false end
+local _recordingActive=false local _recordBuf={} local _recordStartTime=0
+local function startAutoRecord() _recordBuf={} _recordStartTime=os.clock() _recordingActive=true task.spawn(function() while _recordingActive do local h,hh=hrp(),hum() if h and hh then table.insert(_recordBuf,{t=os.clock()-_recordStartTime,cf=h.CFrame,hum=tostring(hh:GetState())}) end task.wait(0.05) end end) end
+local function stopAutoRecord(name) _recordingActive=false task.wait(0.1) if #_recordBuf>0 then V9._routes[name]=_recordBuf notify("Auto-saved: "..name) return true end return false end
+local function replayRoute(name) local rt=V9._routes[name] if not rt or #rt==0 then return false end notify("Replay: "..name) local st=os.clock() for _,f in ipairs(rt) do local el=os.clock()-st if el<f.t then task.wait(f.t-el) end local h,hh=hrp(),hum() if not h or not hh then task.wait(0.1) continue end h.CFrame=f.cf if f.hum:find("Jumping") or f.hum:find("Freefall") then pcall(function() hh:ChangeState(Enum.HumanoidStateType.Jumping) end) end end return true end
+local ESP={}
+local function espClear(o) local e=ESP[o] if e then pcall(function() e.box:Remove() end) pcall(function() e.txt:Remove() end) ESP[o]=nil end end
+local function espAdd(o,color) if not Drawing or ESP[o] then return end local b=Drawing.new("Square") b.Thickness=1 b.Filled=false b.Color=color b.Visible=false local t=Drawing.new("Text") t.Size=14 t.Center=true t.Outline=true t.Color=color t.Visible=false ESP[o]={box=b,txt=t} end
+Players.PlayerRemoving:Connect(function(p) if p.Character then espClear(p.Character) end end)
+local Sword={buyAll=false,saber=false,pole=false,trident=false,dealer=false,gearV2=false}
+local Leg={yamaFarm=false,yamaPull=false,torch=false,longma=false,cdkAssist=false}
 
--- ─── ordering ─────────────────────────────────────────────────
-local function extractOrder(part: BasePart): number?
-    for _, attr in ipairs(ATTR_CANDIDATES) do
-        local v = part:GetAttribute(attr)
-        if typeof(v) == "number" then return v end
-    end
-    local m = part.Name:match("(%d+)%s*$") or part.Name:match("(%d+)")
-    if m then return tonumber(m) end
-    return nil
-end
+local function autofarmLoop() while S.autofarm do local h=hrp() local m=mobByName(S.mob) if h and m then local mh=m:FindFirstChild("HumanoidRootPart") if mh and mh:IsA("BasePart") then h.CFrame=mh.CFrame*CFrame.new(0,3,-5) local sw=equip("sword") or equip("melee") for _=1,3 do swing(sw) task.wait(0.03) end if S.autoSkill then useSkill(S.skillKey) end if S.autoBuso then sendKey("J") end end end if S.autoQuest then pcall(function() CommF:InvokeServer("StartQuest",S.questName~="" and S.questName or S.mob,0) end) end task.wait(0.12) end end
+local function autoRaidLoop() while S.autoRaid do if S.autoChip then pcall(function() CommF:InvokeServer("Raids","Chip",S.raidIsland) end) end local h=hrp() if h then h.CFrame=RAID_CF[S.raidIsland] or RAID_CF[1] end task.wait(2) end end
+local function fruitSniperLoop() while S.fruitSniper do local f=WS:FindFirstChild("Fruits") if f then for _,fr in ipairs(f:GetChildren()) do local ha=fr:FindFirstChild("Handle") local h=hrp() if ha and ha:IsA("BasePart") and h then h.CFrame=ha.CFrame task.wait(0.15) local p=fr:FindFirstChildOfClass("ProximityPrompt") if p then pcall(function() fireproximityprompt(p) end) end end end if S.fruitHop and #f:GetChildren()==0 then safeHop() end end task.wait(0.8) end end
+local function fastAttackLoop() while S.fastAttack do swing(equip("sword") or equip("melee")) task.wait(S.fastDelay) end end
+local function autoDodgeLoop() while S.autoDodge do local e,d=nearestEnemy(15) if e and d and d<12 then sendKey(S.dodgeKey) end task.wait(0.4) end end
+local function autoComboLoop() while S.autoCombo do local t,d=nearestPlayer(S.aimFov) if t and d and d<80 then faceTarget(t.hrp) fireSkills(S.comboSkills,S.comboDelay) end task.wait(0.5) end end
+local function bountyHunterLoop() while S.bountyHunter do local b,bb=nil,0 for _,e in ipairs(getPlayers()) do local bo=getBounty(e.plr) if bo>bb then b,bb=e,bo end end if b and bb>0 then local h=hrp() if h then h.CFrame=b.hrp.CFrame*CFrame.new(0,3,-5) faceTarget(b.hrp) fireSkills(S.comboSkills,S.comboDelay) if S.autoBuso then sendKey("J") end end end task.wait(1) end end
+local function autoStatsLoop() while S.autoStats do pcall(function() CommF:InvokeServer("AddPoint",S.statTarget,1) end) pcall(function() CommF:InvokeServer("AddPoint",S.statTarget,3) end) task.wait(1) end end
+local function antiAfkLoop() while S.antiAfk do pcall(function() VU:CaptureController() VU:ClickButton1(Vector2.new(0,0)) end) task.wait(60) end end
+local function applyFPSBoost() for _,v in ipairs(game:GetDescendants()) do if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Smoke") or v:IsA("Fire") then v.Enabled=false end end game.Lighting.GlobalShadows=false game.Lighting.FogEnd=9e9 notify("FPS boost") end
+local FS_LIST={{k="Superhuman",r="BuySuperhuman"},{k="Death Step",r="BuyBlackLeg"},{k="Sharkman",r="BuyFishmanKarate"},{k="Electric Claw",r="BuyElectricClaw"},{k="Dragon Talon",r="BuyDragonTalon"},{k="Godhuman",r="BuyGodhuman"}}
+local _fsFlags={}
+local function fsLoop(k,r) while _fsFlags[k] do pcall(function() CommF:InvokeServer(r) end) task.wait(1.5+math.random()*2.5) end end
+local function ghGrindLoop() while S.ghGrind do local o=ownedSorted() if #o==0 then notify("GH:no style") task.wait(5) else local tg=o[1] local m=mastery(tg) if m>=S.ghTarget then local ar,miss=true,nil for _,s in ipairs(o) do if mastery(s)<S.ghTarget then ar=false miss=s break end end if ar then pcall(function() CommF:InvokeServer("BuyGodhuman") end) notify("GH:all") else notify("GH:next "..(miss or "?")) end task.wait(5) else local isl=islandForLevel() if S._ghLastIsland~=isl.name then local h=hrp() if h then h.CFrame=isl.cf*CFrame.new(math.random(-30,30),0,math.random(-30,30)) S._ghLastIsland=isl.name notify("GH:"..tg.."("..m.."/"..S.ghTarget..")") end end local t=getTool(tg) if t and t.Parent~=LP.Character then t.Parent=LP.Character end if hitNearest(80)==0 then local h=hrp() if h then h.CFrame=h.CFrame*CFrame.new(math.random(-15,15),0,math.random(-15,15)) end end task.wait(0.1) end end end end
+local function autogetLoop() while S.agRunning do local g=0 for _,folder in ipairs(scanFolders()) do for _,obj in ipairs(folder:GetChildren()) do local n=obj.Name local w=false if V8._agFruit and isFruit(n) then w=true elseif V8._agDrop and isDrop(n) then w=true elseif V8._agChest and folder.Name:find("Chest",1,true) then w=true elseif V8._agBerry and isBerry(n) then w=true elseif V8._agFlower and isFlower(n) then w=true elseif V8._agGear and isGear(n) then w=true elseif V8._agChalice and isChalice(n) then w=true end if w and grabObject(obj) then g=g+1 end end end if g>0 then notify("AutoGet:"..g) end task.wait(0.4) end end
+local function swordBuyLoop() while Sword.buyAll do for _,r in ipairs({{n="buyAllSwords",a={"Ground"}},{n="BuySword",a={"Ground"}},{n="BuyAllSwords"},{n="PurchaseSword"}}) do if r.a then pcall(function() CommF:InvokeServer(r.n,r.a[1]) end) else pcall(function() CommF:InvokeServer(r.n) end) end task.wait(0.2) end task.wait(10) end end
 
-local function orderByAttribute(nodes: {BasePart}): {Vec3}?
-    local keyed: {[number]: BasePart} = {}
-    local count = 0
-    for _, n in ipairs(nodes) do
-        local ord = extractOrder(n)
-        if ord ~= nil and keyed[ord] == nil then
-            keyed[ord] = n
-            count = count + 1
-        end
-    end
-    if count ~= #nodes then return nil end
+-- ============ UPGRADED v16.3 SWORD/PROGRESSION LOOPS ============
+local function saberQuestLoopV3() while Sword.saber do local saber=findNPCAny({"Saber Expert","Saber"}) if not saber then local h=hrp() if h then h.CFrame=CFrame.new(-1500,20,500) end task.wait(1) saber=findNPCAny({"Saber Expert","Saber"}) end if saber then tpTo(saber) task.wait(0.4) local t0=os.clock() while Sword.saber and (os.clock()-t0)<120 do local vh=saber:FindFirstChild("HumanoidRootPart") local vhu=saber:FindFirstChild("Humanoid") if not vh or not vhu or vhu.Health<=0 then break end local h=hrp() if h and vh:IsA("BasePart") then h.CFrame=vh.CFrame*CFrame.new(0,3,-4) swing(equip("sword") or equip("melee")) fireSkills({"Z","X","C","V"},0.1) end task.wait(0.2) end if getTool("Saber") or hasItemNamed("Saber") then notify("Saber: acquired") Sword.saber=false break end end task.wait(2) end end
 
-    local keys: {number} = {}
-    for k in pairs(keyed) do table.insert(keys, k) end
-    table.sort(keys)
+local function poleQuestLoopV3() while Sword.pole do local thunder=findNPCAny({"Thunder God","Thunder"}) if not thunder then local h=hrp() if h then h.CFrame=CFrame.new(-500,500,500) end task.wait(1) thunder=findNPCAny({"Thunder God","Thunder"}) end if thunder then local thunderHrp=thunder:FindFirstChild("HumanoidRootPart") local partner=nil if thunderHrp then for _,e in ipairs(getPlayers()) do if (e.hrp.Position-thunderHrp.Position).Magnitude<100 then partner=e break end end end if partner then tpTo(thunder) task.wait(0.4) local t0=os.clock() while Sword.pole and (os.clock()-t0)<60 do local vh=thunder:FindFirstChild("HumanoidRootPart") local vhu=thunder:FindFirstChild("Humanoid") if not vh or not vhu or vhu.Health<=0 then break end local h=hrp() if h and vh:IsA("BasePart") then h.CFrame=vh.CFrame*CFrame.new(0,3,-4) swing(equip("sword") or equip("melee")) fireSkills({"Z","X","C","V"},0.1) end task.wait(0.2) end else notify("Pole: need 2 player — invite + hop") pcall(function() local ce=RS:FindFirstChild("DefaultChatSystemChatEvents") local say=ce and ce:FindFirstChild("SayMessageRequest") if say then say:FireServer("Pole quest pls help — need 2 player at Thunder God","All") end end) task.wait(5) if #getPlayers()<1 then hopToPopulatedServer() end end end task.wait(3) end end
 
-    local out: {Vec3} = {}
-    for _, k in ipairs(keys) do
-        table.insert(out, keyed[k].Position)
-    end
-    return out
-end
+local function tridentQuestLoopV3() while Sword.trident do local tide=findNPCAny({"Tide Keeper","Tide","Keeper"}) if not tide then local h=hrp() if h then h.CFrame=CFrame.new(-9500,100,5500) end task.wait(1) tide=findNPCAny({"Tide Keeper","Tide"}) end if tide then tpTo(tide) task.wait(0.4) local t0=os.clock() while Sword.trident and (os.clock()-t0)<120 do local vh=tide:FindFirstChild("HumanoidRootPart") local vhu=tide:FindFirstChild("Humanoid") if not vh or not vhu or vhu.Health<=0 then break end local h=hrp() if h and vh:IsA("BasePart") then h.CFrame=vh.CFrame*CFrame.new(0,3,-4) swing(equip("sword") or equip("melee")) fireSkills({"Z","X","C","V"},0.1) end task.wait(0.2) end if getTool("Trident") or hasItemNamed("Trident") then notify("Trident: acquired") Sword.trident=false break end end task.wait(2) end end
 
-local function orderByProximity(nodes: {BasePart}, startPos: Vec3?): {Vec3}
-    local pool: {BasePart} = {}
-    for _, n in ipairs(nodes) do table.insert(pool, n) end
+local function dealerLoopV3() local spots={CFrame.new(200,30,500),CFrame.new(-1000,30,-500),CFrame.new(5000,30,3000),CFrame.new(-3000,60,-2000)} while Sword.dealer do for _,wp in ipairs(spots) do if not Sword.dealer then break end local h=hrp() if h then h.CFrame=wp end task.wait(0.8) local dealer=findNPCAny({"Legendary Sword Dealer","Sword Dealer","Legendary"}) if dealer then tpTo(dealer) task.wait(0.5) firePPsNear(30) pcall(function() CommF:InvokeServer("BuyLegendarySword") end) task.wait(1) end end task.wait(8) end end
 
-    local startI = 1
-    if startPos then
-        local best, bi = math.huge, 1
-        for i, p in ipairs(pool) do
-            local d = (p.Position - startPos).Magnitude
-            if d < best then best, bi = d, i end
-        end
-        startI = bi
-    end
+local function eliteFarmLoop() while Leg.yamaFarm do local f=enemiesFolder() if f then local found=false for _,v in ipairs(f:GetChildren()) do local n=v.Name:lower() if (n:find("elite",1,true) or n:find("pirate",1,true)) and v:FindFirstChild("HumanoidRootPart") then local vhu=v:FindFirstChild("Humanoid") if vhu and vhu:IsA("Humanoid") and vhu.Health>0 then local h=hrp() local vh=v:FindFirstChild("HumanoidRootPart") if h and vh and vh:IsA("BasePart") then h.CFrame=vh.CFrame*CFrame.new(0,3,-4) found=true swing(equip("sword") or equip("melee")) end end end end if not found then local h=hrp() if h then h.CFrame=CFrame.new(-5000,100,-4000) end end end task.wait(0.5) end end
+local function yamaPullLoop() while Leg.yamaPull do local h=hrp() if h then h.CFrame=CFrame.new(-9500,150,6000) end task.wait(0.8) local s=findPart("Yama") or findPart("Sword") if s then local pos=s:IsA("BasePart") and s.Position or (s:IsA("Model") and s:GetPivot().Position) local h2=hrp() if pos and h2 then h2.CFrame=CFrame.new(pos+Vector3.new(0,3,-3)) for _=1,6 do local c=LP.Character if c then local t=c:FindFirstChildOfClass("Tool") if t then t.Parent=LP.Backpack end end pcall(function() mouse1click() end) for _,d in ipairs(s:GetDescendants()) do if d:IsA("ProximityPrompt") and d.Enabled then pcall(function() fireproximityprompt(d) end) end end task.wait(0.5) end end else firePPsNear(30) end task.wait(5) end end
+local function torchLoop() while Leg.torch do local t=equip("torch") or equip("holy") if not t then task.wait(3) else for _,wp in ipairs(TORCH_ORDER) do local h=hrp() if h then h.CFrame=wp task.wait(0.4) firePPsNear(20) end task.wait(0.3) end end task.wait(2) end end
+local function longmaLoop() while Leg.longma do local b=findNPCAny({"Longma","Dragon","Dragon Master"}) if b then tpTo(b) task.wait(0.6) if not S.killAura then swing(equip("sword") or equip("melee")) end end task.wait(3) end end
+local function cdkAssistLoop() while Leg.cdkAssist do local y=readMastery("Yama") or 0 local t=readMastery("Tushita") or 0 if y>=350 and t>=350 then local c=findNPCAny({"Crypt","Alucard","Crypt Master"}) if c then tpTo(c) task.wait(0.7) firePPsNear(25) pcall(function() CommF:InvokeServer("Cursed Dual Katana") end) end end task.wait(6) end end
+local function raceV2Loop() while S.autoRaceV2 do local a=findNPC("Alchemist") if a then tpTo(a) task.wait(0.6) firePPsNear(20) task.wait(0.5) pcall(function() CommF:InvokeServer("Alchemist") end) end task.wait(8) end end
 
-    local chain: {Vec3} = {}
-    local current = pool[startI].Position
-    table.insert(chain, current)
-    table.remove(pool, startI)
+local function makeDracoLoop(lv) return function() while V7["dracoV"..lv] do local h=hrp() if not h then task.wait(1) continue end h.CFrame=DRACO_CF[lv] or DRACO_CF[1] task.wait(0.6) pcall(function() CommF:InvokeServer("RaceV"..lv) end) pcall(function() CommF:InvokeServer("Draco",lv) end) firePPsNear(30) if not S.killAura then swing(equip("sword") or equip("melee")) end task.wait(6) end end end
+local function relicTrialLoop() while V7.relicTrial do local h=hrp() if h then h.CFrame=CFrame.new(5500,50,-6500) end firePPsNear(35) pcall(function() CommF:InvokeServer("RelicTrial") end) task.wait(4) end end
+local function prehistoricLoop() while V7.prehistoric do local h=hrp() if h then h.CFrame=CFrame.new(5500,50,-6500) end if not S.killAura then swing(equip("sword") or equip("melee")) end task.wait(3) end end
+local function volcanoLoopV3() local lastSeen=0 while V7.volcano do local volcano=findPart("Volcano") or findPart("VolcanoCore") or findPart("Erupt") local hasEvent=false if volcano then local h=hrp() if h then local pos=volcano:IsA("BasePart") and volcano.Position or (volcano:IsA("Model") and volcano:GetPivot().Position) if pos and (pos-h.Position).Magnitude<2000 then h.CFrame=CFrame.new(pos+Vector3.new(0,10,-30)) firePPsNear(80) if not S.killAura then swing(equip("sword") or equip("melee")) end hasEvent=true lastSeen=os.clock() end end end if not hasEvent and (os.clock()-lastSeen)>180 then notify("Volcano: 3min idle — hop") hopToPopulatedServer() lastSeen=os.clock() end task.wait(3) end end
+local function grabPartsMatching(pred,range) local h=hrp() if not h then return end for _,top in ipairs(WS:GetChildren()) do for _,v in ipairs(top:GetChildren()) do if v:IsA("BasePart") or v:IsA("Model") then if pred(v.Name:lower()) then local pos if v:IsA("BasePart") then pos=v.Position else local ha=v:FindFirstChild("Handle") local hr=v:FindFirstChild("HumanoidRootPart") if ha and ha:IsA("BasePart") then pos=ha.Position elseif hr and hr:IsA("BasePart") then pos=hr.Position else pos=v:GetPivot().Position end end if pos and (pos-h.Position).Magnitude<=range then h.CFrame=CFrame.new(pos+Vector3.new(0,3,-2)) task.wait(0.15) for _,d in ipairs(v:GetDescendants()) do if d:IsA("ProximityPrompt") and d.Enabled then pcall(function() fireproximityprompt(d) end) end end firePPsNear(10) end end end end end end
+local function dinoBonesLoop() while V7.dinoBones do grabPartsMatching(function(n) return n:find("bone",1,true)~=nil end,2000) task.wait(2) end end
+local function dragonEggsLoop() while V7.dragonEggs do grabPartsMatching(function(n) return n:find("dragon",1,true)~=nil and n:find("egg",1,true)~=nil end,3000) task.wait(2) end end
+local function trainingV4Loop() while V7.trainingV4 do local h=hrp() if h then h.CFrame=DRACO_CF[4] end firePPsNear(30) if not S.killAura then swing(equip("sword") or equip("melee")) end task.wait(3) end end
+local function autoFishLoop() while V7.autoFish do local r=equip("rod") if r and r:FindFirstChild("Click") then pcall(function() r.Click:FireServer() end) task.wait(1.2) pcall(function() r.Click:FireServer() end) task.wait(1.2) else task.wait(1) end end end
+local function autoSellFishLoop() while V7.autoSellFish do local m=findNPCAny({"Fish","Merchant"}) if m then tpTo(m) task.wait(0.7) firePPsNear(20) pcall(function() CommF:InvokeServer("SellFish") end) end task.wait(10) end end
+local function seaEventLoop() while V7.seaEvent do local h=hrp() if h then local f=enemiesFolder() if f then for _,v in ipairs(f:GetChildren()) do local n=v.Name:lower() if n:find("terror",1,true) or n:find("shark",1,true) or n:find("leviathan",1,true) or n:find("piranha",1,true) or n:find("seabeast",1,true) or n:find("ship",1,true) then local vh=v:FindFirstChild("HumanoidRootPart") local vhu=v:FindFirstChild("Humanoid") if vh and vh:IsA("BasePart") and vhu and vhu:IsA("Humanoid") and vhu.Health>0 then h.CFrame=vh.CFrame*CFrame.new(0,5,-6) if not S.killAura then swing(equip("sword") or equip("melee")) end end end end end end task.wait(0.5) end end
+local function autoSailLoop() while V7.autoSail do local b=WS:FindFirstChild("Boat") or WS:FindFirstChild("Ship") if not b then pcall(function() CommF:InvokeServer("SpawnBoat") end) end pcall(function() CommF:InvokeServer("Boat","Sail") end) if V7.shipSpeed then pcall(function() CommF:InvokeServer("BoatSpeed",200) end) end task.wait(3) end end
+local function shipNoclipLoop() while V7.shipNoclip do local b=WS:FindFirstChild("Boat") or WS:FindFirstChild("Ship") if b then for _,v in ipairs(b:GetDescendants()) do if v:IsA("BasePart") then v.CanCollide=false end end end task.wait(0.5) end end
+local function autoFactoryLoop() while V7.autoFactory do local h=hrp() if h then h.CFrame=CFrame.new(-5000,30,4000) end firePPsNear(30) pcall(function() CommF:InvokeServer("Factory","Start") end) if not S.killAura then swing(equip("sword") or equip("melee")) end task.wait(4) end end
+local function factoryRaidLoop() while V7.factoryRaid do pcall(function() CommF:InvokeServer("FactoryRaid","Start") end) local h=hrp() if h then h.CFrame=CFrame.new(-5000,30,4000) end if not S.killAura then swing(equip("sword") or equip("melee")) end task.wait(3) end end
+local function autoDungeonLoop() while V7.autoDungeon do local h=hrp() if h then h.CFrame=CFrame.new(-9500,100,6000) end firePPsNear(30) pcall(function() CommF:InvokeServer("Dungeon","Start") end) if not S.killAura then swing(equip("sword") or equip("melee")) end for _,v in ipairs(WS:GetDescendants()) do if v.Name:lower():find("portal",1,true) or v.Name:lower():find("exit",1,true) then if v:IsA("BasePart") then local h2=hrp() if h2 then h2.CFrame=v.CFrame end end end end task.wait(4) end end
+local function skullGuitarLoop() while V7.skullGuitar do local n=findNPC("Skull") or findNPC("Guitar") if n then tpTo(n) task.wait(0.7) firePPsNear(25) pcall(function() CommF:InvokeServer("SkullGuitar") end) end task.wait(8) end end
+local function obsV2Loop() while V7.obsV2 do pcall(function() CommF:InvokeServer("Observation") end) pcall(function() CommF:InvokeServer("ObservationV2") end) task.wait(8) end end
+local function rainbowHakiLoop() while V7.rainbowHaki do pcall(function() CommF:InvokeServer("RainbowHaki") end) task.wait(10) end end
+local function buyFruitLoop() while V7.autoBuyFruit do pcall(function() CommF:InvokeServer("BuyFruit","Random") end) task.wait(6) end end
+local function cheapestFruitLoop() while V7.cheapestFruit do pcall(function() CommF:InvokeServer("BuyFruit","Cheapest") end) task.wait(6) end end
+local function autoGunLoop() while V7.autoGun do for _,r in ipairs({"BuyGun","buyAllGuns","BuyAllGuns"}) do pcall(function() CommF:InvokeServer(r) end) task.wait(0.3) end task.wait(10) end end
+local function autoAccessoryLoop() while V7.autoAccessory do for _,r in ipairs({"BuyAccessory","BuyAllAccessory"}) do pcall(function() CommF:InvokeServer(r) end) task.wait(0.3) end task.wait(10) end end
+local function autoMaterialLoop() while V7.autoMaterial do pcall(function() CommF:InvokeServer("BuyMaterial") end) task.wait(8) end end
+local function autoRerollLoop() while V7.autoReroll do pcall(function() CommF:InvokeServer("Race","Reroll") end) task.wait(12) end end
+local function smartWeaponLoop() while V7.smartWeapon do local e,d=nearestEnemy(50) if e and d then if d<15 then equip("melee") elseif d<40 then equip("sword") else equip("fruit") end end task.wait(0.3) end end
+local function panicSky() local h=hrp() if not h then return end h.CFrame=h.CFrame+Vector3.new(0,500,0) S.noclip=true S.infJump=true S.fly=true S.flySpeed=150 notify("PANIC SKY") end
+local function antiBanToggle(on) if on then V7._antiBanSaved={killAura=S.killAura,fastAttack=S.fastAttack,aimbot=S.aimbot,autoSkill=S.autoSkill,silentAim=S.silentAim,skillAimbot=S.skillAimbot,autoCombo=S.autoCombo,walkSpeed=S.walkSpeed,jumpPower=S.jumpPower} S.killAura=false S.fastAttack=false S.aimbot=false S.autoSkill=false S.silentAim=false S.skillAimbot=false S.autoCombo=false S.walkSpeed=16 S.jumpPower=50 notify("AntiBan ON") else if V7._antiBanSaved then for k,v in pairs(V7._antiBanSaved) do S[k]=v end V7._antiBanSaved=nil end notify("AntiBan OFF") end end
+local function applyFullBright() game.Lighting.Ambient=Color3.fromRGB(178,178,178) game.Lighting.OutdoorAmbient=Color3.fromRGB(178,178,178) game.Lighting.Brightness=2 notify("Bright") end
+local function applyNoFog() game.Lighting.FogEnd=9e9 game.Lighting.FogStart=9e9 notify("NoFog") end
+local function setFOVEnabled(on) if on then if V7._fovConn then V7._fovConn:Disconnect() end V7._fovConn=RunSvc.RenderStepped:Connect(function() local cam=WS.CurrentCamera if cam and cam.FieldOfView~=V7.fovValue then cam.FieldOfView=V7.fovValue end end) else if V7._fovConn then V7._fovConn:Disconnect() V7._fovConn=nil end end end
+local function getPingMs() local now=os.clock() if now-V7._pingTime>2 then local ok,p=pcall(function() return LP:GetNetworkPing() end) V7._pingCache=ok and math.floor((p or 0)*1000) or 0 V7._pingTime=now end return V7._pingCache end
+local function tpToPlayerName(name) if name=="" then return false end local l=name:lower() for _,p in ipairs(Players:GetPlayers()) do if p~=LP and p.Name:lower():find(l,1,true) and p.Character then local vh=p.Character:FindFirstChild("HumanoidRootPart") local h=hrp() if vh and vh:IsA("BasePart") and h then h.CFrame=vh.CFrame*CFrame.new(0,3,-5) notify("TP "..p.Name) return true end end end return false end
 
-    while #pool > 0 do
-        local best, bestI = math.huge, 1
-        for i, p in ipairs(pool) do
-            local d = (p.Position - current).Magnitude
-            if d < best then best, bestI = d, i end
-        end
-        local nextNode = table.remove(pool, bestI)
-        current = nextNode.Position
-        table.insert(chain, current)
-    end
+local function autoYamaV2Loop() local K,MC=30,25 local cy,acc=0,0 while V8.autoYama and cy<MC do cy=cy+1 if hasYama() then notify("Yama:OK") V8.autoYama=false break end local locs={CFrame.new(-5000,100,-4000),CFrame.new(-4500,80,-4200),CFrame.new(-5200,110,-3800)} local li=1 local fs=os.clock() while V8.autoYama and acc<K and (os.clock()-fs)<300 do local h=hrp() if not h then task.wait(1) continue end local f=enemiesFolder() local found=false if f then for _,v in ipairs(f:GetChildren()) do local n=v.Name:lower() if n:find("elite") or n:find("pirate") then local vh=v:FindFirstChild("HumanoidRootPart") local vhu=v:FindFirstChild("Humanoid") if vh and vh:IsA("BasePart") and vhu and vhu:IsA("Humanoid") and vhu.Health>0 then h.CFrame=vh.CFrame*CFrame.new(0,3,-4) swing(equip("sword") or equip("melee")) fireSkills({"Z","X","C","V"},0.08) if vhu.Health<=0 then acc=acc+1 found=true break end end end end end if not found then li=li%#locs+1 h.CFrame=locs[li] end task.wait(0.2) end notify("Yama:"..acc.."/"..K) local hh=hrp() if hh then hh.CFrame=CFrame.new(-9500,150,6000) end task.wait(1) for _,v in ipairs(WS:GetDescendants()) do local n=v.Name:lower() if n:find("yama") or (n:find("sword") and v:FindFirstChildOfClass("ProximityPrompt")) then local p=v:FindFirstChildOfClass("ProximityPrompt") if p and p.Enabled then for _=1,6 do local c=LP.Character if c then local t=c:FindFirstChildOfClass("Tool") if t then t.Parent=LP.Backpack end end pcall(function() fireproximityprompt(p) end) task.wait(0.4) end end break end end if waitFor(hasYama,3) then notify("Yama:OK") V8.autoYama=false break end if cy%5==0 then notify("Yama:hop") safeHop() task.wait(8) end task.wait(2) end if V8.autoYama then notify("Yama:max") V8.autoYama=false end end
+local function autoHolyTorchLoop() while V8.autoHolyTorch do if hasHolyTorch() then notify("Torch:OK") V8.autoHolyTorch=false break end local h=hrp() if h then h.CFrame=CFrame.new(-9500,150,6000) end task.wait(1) firePPsNear(40) task.wait(1) end end
+local function autoTushitaV2Loop() local MC,cy=30,0 while V8.autoTushita and cy<MC do cy=cy+1 if hasTushita() then notify("Tushita:OK") V8.autoTushita=false break end if not hasHolyTorch() then notify("need torch") V8.autoTushita=false break end local rip=findNPCAny({"rip_indra","Rip_Indra","Rip Indra"}) if not rip then notify("Tushita: Rip_Indra not active") V8.autoTushita=false break end local t=equip("torch") or equip("holy") if not t then task.wait(1) continue end local lit=0 for i,wp in ipairs(TORCH_ORDER) do if not V8.autoTushita then break end local hh=hrp() if hh then hh.CFrame=wp task.wait(0.3) for _=1,3 do firePPsNear(20) task.wait(0.1) end end local ok=waitFor(function() for _,v in ipairs(WS:GetDescendants()) do if v:IsA("ProximityPrompt") and v.Parent and v.Parent:IsA("BasePart") then if (v.Parent.Position-wp.Position).Magnitude<25 then local a=v.Parent:GetAttribute("Lit") or v.Parent:GetAttribute("lit") if type(a)=="boolean" then return a end end end end return false end,2) if ok then lit=lit+1 end task.wait(0.2) end notify("Tushita:"..lit.."/5") local lm=findNPCAny({"Longma","Dragon","Dragon Master"}) if lm then tpTo(lm) task.wait(0.5) local t0=os.clock() while V8.autoTushita and (os.clock()-t0)<240 do local hh=hrp() local vh=lm:FindFirstChild("HumanoidRootPart") local vhu=lm:FindFirstChild("Humanoid") if hh and vh and vh:IsA("BasePart") and vhu and vhu:IsA("Humanoid") and vhu.Health>0 then hh.CFrame=vh.CFrame*CFrame.new(0,3,-4) swing(equip("sword") or equip("melee")) fireSkills({"Z","X","C","V"},0.1) else break end task.wait(0.2) end end if waitFor(hasTushita,3) then notify("Tushita:OK") V8.autoTushita=false break end task.wait(2) end if V8.autoTushita then notify("Tushita:max") V8.autoTushita=false end end
+local function autoCDKV2Loop() if hasCDK() then notify("CDK:owned") V8.autoCDK=false return end local y=readMastery("Yama") or 0 local t=readMastery("Tushita") or 0 if y<350 or t<350 then notify("CDK:mastery "..y.."/"..t) V8.autoCDK=false return end local trials={{n="Docks",p=1},{n="Sense",p=2},{n="Soulless",p=3},{n="Pain",p=4},{n="Haze",p=5},{n="Reaper",p=6},{n="Skeleton",p=7}} local done=V9._checkpoint["cdk_v16"] or {} V9._checkpoint["cdk_v16"]=done for _,tr in ipairs(trials) do if not V8.autoCDK then break end if hasCDK() then break end if done[tr.n] then continue end local att=0 local ok=false while att<5 and V8.autoCDK do att=att+1 notify("CDK:"..tr.n.." "..att) local c=findNPCAny({"Crypt","Alucard","Crypt Master"}) if c then tpTo(c) task.wait(0.7) firePPsNear(25) end pcall(function() CommF:InvokeServer("Cursed Dual Katana") end) task.wait(0.5) local t0=os.clock() while V8.autoCDK and (os.clock()-t0)<90 do if hasCDK() then break end local h=hrp() local f=enemiesFolder() if h and f then for _,v in ipairs(f:GetChildren()) do local vh=v:FindFirstChild("HumanoidRootPart") local vhu=v:FindFirstChild("Humanoid") if vh and vh:IsA("BasePart") and vhu and vhu:IsA("Humanoid") and vhu.Health>0 then h.CFrame=vh.CFrame*CFrame.new(0,3,-3) swing(equip("sword") or equip("melee")) fireSkills({"Z","X","C","V"},0.1) break end end end firePPsNear(30) task.wait(0.5) end if hasCDK() then ok=true break end if cdkPhaseComplete(tr.p) then ok=true break end task.wait(1) end if ok then done[tr.n]=true notify("CDK:"..tr.n.." OK") else notify("CDK:"..tr.n.." fail skip") end end if waitFor(hasCDK,3) then notify("CDK:OK") end V8.autoCDK=false end
+local function autoHazeV2Loop() game.Lighting.Ambient=Color3.fromRGB(178,178,178) game.Lighting.OutdoorAmbient=Color3.fromRGB(178,178,178) game.Lighting.Brightness=2 game.Lighting.FogEnd=9e9 game.Lighting.FogStart=9e9 local MC,cy,gl=20,0,0 while V8.autoHaze and cy<MC do cy=cy+1 if hasCDK() then notify("Haze:OK") break end local pp={} for _,v in ipairs(WS:GetDescendants()) do if v:IsA("Model") and v:FindFirstChild("HumanoidRootPart") and v:FindFirstChildOfClass("Humanoid") then local n=v.Name:lower() if n:find("soul") or n:find("spirit") or n:find("misery") or n:find("purple") or n:find("ghost") then local hr=v:FindFirstChild("HumanoidRootPart") if hr and hr:IsA("BasePart") then if hr.Position.Y>-500 and hr.Position.Y<2000 and hr.Position.Magnitude<20000 then table.insert(pp,v) else gl=gl+1 end end end end end if #pp==0 then if gl>0 then notify("Haze:glitch hop") safeHop() task.wait(10) gl=0 else notify("Haze:empty hop") safeHop() task.wait(10) end continue end for _,npc in ipairs(pp) do if not V8.autoHaze then break end if hasCDK() then break end local vh=npc:FindFirstChild("HumanoidRootPart") local vhu=npc:FindFirstChild("Humanoid") if not vh or not vhu then continue end local h=hrp() if not h then continue end h.CFrame=vh.CFrame*CFrame.new(0,3,-4) local t0=os.clock() while (os.clock()-t0)<15 and vhu.Health>0 do swing(equip("sword") or equip("melee")) fireSkills({"Z","X","C","V"},0.1) task.wait(0.2) end end task.wait(1) end end
+local function autoBossDropV2Loop() local i,kc,dc=1,0,0 while V8.autoBossDrop do local bn=BOSS_QUEUE[i] local b=findNPC(bn) if not b then i=i%#BOSS_QUEUE+1 task.wait(1) continue end tpTo(b) task.wait(0.4) local t0=os.clock() local killed=false while V8.autoBossDrop and (os.clock()-t0)<120 do local vh=b:FindFirstChild("HumanoidRootPart") local vhu=b:FindFirstChild("Humanoid") if not vh or not vhu then killed=true break end if vhu.Health<=0 then killed=true break end local h=hrp() if h and vh:IsA("BasePart") then h.CFrame=vh.CFrame*CFrame.new(0,3,-4) swing(equip("sword") or equip("melee")) fireSkills({"Z","X","C","V"},0.08) end task.wait(0.2) end if not killed then i=i%#BOSS_QUEUE+1 task.wait(1) continue end kc=kc+1 task.wait(0.5) local got=false for _,fn in ipairs({"Drops","Fruits","ItemDrops","SpawnedItems"}) do local f=WS:FindFirstChild(fn) if f then for _,v in ipairs(f:GetChildren()) do if isDrop(v.Name) or isFruit(v.Name) then if grabObject(v) then got=true end end end end end if got then dc=dc+1 notify("Boss:"..dc.."/"..kc) end if kc-dc>=10 then notify("Boss:10 no drop hop") safeHop() task.wait(10) kc=0 dc=0 end task.wait(1) end end
+local function autoRaceV2Loop() while S.autoRaceV2 do local hf=LP.Backpack:FindFirstChild("Flower") or (LP.Character and LP.Character:FindFirstChild("Flower")) local hb=LP.Backpack:FindFirstChild("Blue Gear") or (LP.Character and LP.Character:FindFirstChild("Blue Gear")) local hr=LP.Backpack:FindFirstChild("Red Gear") or (LP.Character and LP.Character:FindFirstChild("Red Gear")) if hf and hb and hr then local a=findNPC("Alchemist") if a then tpTo(a) task.wait(0.7) firePPsNear(25) pcall(function() CommF:InvokeServer("Alchemist") end) task.wait(2) notify("RV2:submit") S.autoRaceV2=false break end else local h=hrp() if not h then task.wait(1) continue end if not hf then h.CFrame=CFrame.new(200,30,500) end if not hb then h.CFrame=CFrame.new(-5000,30,4000) end if not hr then h.CFrame=CFrame.new(-3000,60,-2000) end local f=enemiesFolder() if f then for _,v in ipairs(f:GetChildren()) do local vh=v:FindFirstChild("HumanoidRootPart") local vhu=v:FindFirstChild("Humanoid") if vh and vh:IsA("BasePart") and vhu and vhu:IsA("Humanoid") and vhu.Health>0 then h.CFrame=vh.CFrame*CFrame.new(0,3,-3) swing(equip("sword") or equip("melee")) break end end end for _,fn in ipairs({"Drops","ItemDrops"}) do local f2=WS:FindFirstChild(fn) if f2 then for _,v in ipairs(f2:GetChildren()) do if isFlower(v.Name) or isGear(v.Name) then grabObject(v) end end end end end task.wait(1) end end
+local function autoFruitSniperLoop() while V8.autoFruitSniper do local f=WS:FindFirstChild("Fruits") local g=0 if f then for _,fr in ipairs(f:GetChildren()) do local ha=fr:FindFirstChild("Handle") local h=hrp() if ha and ha:IsA("BasePart") and h then h.CFrame=ha.CFrame task.wait(0.15) for _,d in ipairs(fr:GetDescendants()) do if d:IsA("ProximityPrompt") and d.Enabled then pcall(function() fireproximityprompt(d) end) end end g=g+1 end end end if g>0 then notify("Fruit:"..g) else safeHop() task.wait(10) end task.wait(2) end end
 
-    if reverseDirection then
-        local rev: {Vec3} = {}
-        for i = #chain, 1, -1 do table.insert(rev, chain[i]) end
-        return rev
-    end
-    return chain
-end
-
-local function buildChain(nodes: {BasePart}, startPos: Vec3?): {Vec3}
-    if #nodes < 4 then return {} end
-    local ordered = orderByAttribute(nodes)
-    if ordered and #ordered >= 4 then return ordered end
-    return orderByProximity(nodes, startPos)
-end
-
--- ─── Catmull-Rom ───────────────────────────────────────────────
-local function catmullRom(p0: Vec3, p1: Vec3, p2: Vec3, p3: Vec3, t: number): Vec3
-    local t2, t3 = t*t, t*t*t
-    return (p1*2 + (p2-p0)*t + (p0*2 - p1*5 + p2*4 - p3)*t2 + (-p0 + p1*3 - p2*3 + p3)*t3) * 0.5
-end
-
--- ─── generate racing line (outside-apex-outside) ───────────────
-local function generateRacingLine(centerline: {Vec3}): {Vec3}
-    local n = #centerline
-    if n < 4 then return centerline end
-
-    local curv: {number} = {}
-    local signed: {number} = {}
-    for i = 1, n do
-        local a = centerline[i] - centerline[math.max(1, i-1)]
-        local b = centerline[math.min(n, i+1)] - centerline[i]
-        local ah = Vector3.new(a.X, 0, a.Z)
-        local bh = Vector3.new(b.X, 0, b.Z)
-        if ah.Magnitude < 1e-3 or bh.Magnitude < 1e-3 then
-            curv[i] = 0; signed[i] = 0
-        else
-            curv[i] = math.acos(math.clamp(ah.Unit:Dot(bh.Unit), -1, 1))
-            signed[i] = ah.Unit:Cross(bh.Unit).Y
-        end
-    end
-
-    local smooth: {number} = {}
-    for i = 1, n do
-        local s, c = 0, 0
-        for j = math.max(1, i-2), math.min(n, i+2) do s = s + curv[j]; c = c + 1 end
-        smooth[i] = s / c
-    end
-
-    local corners: {{start: number, finish: number, sign: number, peak: number}} = {}
-    local inC, startI, apexV = false, 0, 0
-    local signSum, signCnt = 0, 0
-    for i = 1, n do
-        if smooth[i] > curveThresh then
-            if not inC then
-                inC, startI, apexV = true, i, smooth[i]
-                signSum, signCnt = 0, 0
-            end
-            if smooth[i] > apexV then apexV = smooth[i] end
-            signSum = signSum + signed[i]; signCnt = signCnt + 1
-        elseif inC then
-            inC = false
-            local sign = (signSum / math.max(signCnt, 1)) > 0 and 1 or -1
-            table.insert(corners, { start = startI, finish = i, sign = sign, peak = apexV })
-        end
-    end
-
-    local racing: {Vec3} = {}
-    for i = 1, n do racing[i] = centerline[i] end
-    for _, cor in ipairs(corners) do
-        local len = cor.finish - cor.start
-        if len >= 3 then
-            local scale = math.clamp(cor.peak / math.rad(50), 0.35, 1) * amp * wetFactor
-            for i = cor.start, cor.finish do
-                local phase = (i - cor.start) / len
-                local mul = math.cos(2 * math.pi * phase) * scale
-                local dir = centerline[math.min(n, i+1)] - centerline[math.max(1, i-1)]
-                local dh = Vector3.new(dir.X, 0, dir.Z)
-                if dh.Magnitude > 1e-3 then
-                    local right = dh.Unit:Cross(Vector3.new(0, 1, 0))
-                    racing[i] = centerline[i] + right * (-cor.sign * mul)
+-- v16.3 UPGRADED FS Cascade
+local function autoFSCascadeLoopV3()
+    local plan={{
+        n="Superhuman",r="BuySuperhuman",prereqs={{style="Dark Step",needed=300},{style="Electric Claw",needed=300},{style="Water Kung Fu",needed=300}}
+    },{n="Death Step",r="BuyBlackLeg",prereqs={{style="Black Leg",needed=400}}
+    },{n="Electric Claw",r="BuyElectricClaw",prereqs={{style="Dark Step",needed=400}}
+    },{n="Sharkman Karate",r="BuyFishmanKarate",prereqs={{style="Water Kung Fu",needed=400}}
+    },{n="Dragon Talon",r="BuyDragonTalon",prereqs={{style="Dragon Breath",needed=400}}
+    },{n="Godhuman",r="BuyGodhuman",prereqs={}}}
+    while V8.autoFSCascade do
+        local allDone=true
+        for _,entry in ipairs(plan) do
+            if not V8.autoFSCascade then break end
+            if not getTool(entry.n) then
+                allDone=false
+                local needsGrind=nil
+                for _,pre in ipairs(entry.prereqs) do local cur=mastery(pre.style) if cur<pre.needed then needsGrind=pre break end end
+                if needsGrind then
+                    notify("FS: grind "..needsGrind.style.." "..mastery(needsGrind.style).."/"..needsGrind.needed)
+                    local isl=islandForLevel() local h=hrp()
+                    if h and isl then h.CFrame=isl.cf end
+                    local tool=equip(needsGrind.style)
+                    if tool and h then
+                        local f=enemiesFolder()
+                        if f then
+                            for _,v in ipairs(f:GetChildren()) do
+                                local vh=v:FindFirstChild("HumanoidRootPart") local vhu=v:FindFirstChild("Humanoid")
+                                if vh and vh:IsA("BasePart") and vhu and vhu:IsA("Humanoid") and vhu.Health>0 then
+                                    h.CFrame=vh.CFrame*CFrame.new(0,3,-3)
+                                    if tool:FindFirstChild("Click") then pcall(function() tool.Click:FireServer() end) end
+                                    for _,k in ipairs({"Z","X","C","V"}) do sendKey(k) task.wait(0.05) end
+                                    break
+                                end
+                            end
+                        end
+                    end
+                    task.wait(0.2) break
+                else
+                    pcall(function() CommF:InvokeServer(entry.r) end) task.wait(2)
+                    if getTool(entry.n) then notify("FS: "..entry.n.." acquired")
+                    else notify("FS: "..entry.n.." need Beli/fragment") end
                 end
             end
         end
-    end
-    return racing
-end
-
--- ─── spline build ──────────────────────────────────────────────
-local function buildSpline(src: {Vec3})
-    local newSpline: {SplinePoint} = {}
-    local n = #src
-    if n < 4 then
-        spline = {}
-        return
-    end
-    for i = 1, n - 1 do
-        local p0 = src[math.max(1, i-1)]
-        local p1 = src[i]
-        local p2 = src[i+1]
-        local p3 = src[math.min(n, i+2)]
-        for s = 0, SPS - 1 do
-            table.insert(newSpline, { pos = catmullRom(p0, p1, p2, p3, s / SPS), speed = 1 })
-        end
-    end
-    table.insert(newSpline, { pos = src[n], speed = 1 })
-
-    for i = 1, #newSpline do
-        local a = newSpline[i].pos - newSpline[math.max(1, i-1)].pos
-        local b = newSpline[math.min(#newSpline, i+1)].pos - newSpline[i].pos
-        local ah = Vector3.new(a.X, 0, a.Z)
-        local bh = Vector3.new(b.X, 0, b.Z)
-        if ah.Magnitude < 1e-3 or bh.Magnitude < 1e-3 then
-            newSpline[i].speed = 1
-        else
-            local ang = math.acos(math.clamp(ah.Unit:Dot(bh.Unit), -1, 1))
-            newSpline[i].speed = math.clamp(1 - ang / math.rad(60), 0.15, 1) * wetFactor
-        end
-    end
-    spline = newSpline
-    lastSplineIdx = 1
-end
-
--- ─── color / draw ──────────────────────────────────────────────
-local function speedColor(s: number): Color3
-    if s > 0.75 then return Color3.fromRGB(60, 220, 60)
-    elseif s > 0.50 then return Color3.fromRGB(230, 225, 60)
-    elseif s > 0.30 then return Color3.fromRGB(255, 150, 40)
-    else return Color3.fromRGB(255, 50, 50) end
-end
-
-local function clearDrawings()
-    for _, d in ipairs(drawings) do
-        if d then d:Remove() end
-    end
-    drawings = {}
-end
-
-local function redraw()
-    clearDrawings()
-    for i = 1, #spline - 1 do
-        local l = Drawing.new("Line")
-        l.From = spline[i].pos
-        l.To = spline[i+1].pos
-        l.Color = speedColor(spline[i].speed)
-        l.Thickness = 3
-        l.Transparency = 0.9
-        l.Visible = true
-        table.insert(drawings, l)
+        if allDone then notify("FS: all acquired") V8.autoFSCascade=false break end
+        task.wait(2)
     end
 end
 
-local function rebuild()
-    if #waypoints < 4 then
-        spline = {}
-        clearDrawings()
-        return
-    end
-    if useGenerated then
-        buildSpline(generateRacingLine(waypoints))
-    else
-        buildSpline(waypoints)
-    end
-    redraw()
-end
+local function autoLowHopLoop() while V8.autoLowHop do hopToPopulatedServer() task.wait(60) end end
+local function gearFarmV2Loop() local bosses={"DoughKing","rip_indra","Cursed Skeleton","Tyrant of the Skies","Longma","Soul Reaper"} local i,fails=1,0 while Sword.gearV2 do local boss=findNPC(bosses[i]) if not boss then i=i%#bosses+1 if i==1 then fails=fails+1 if fails>=3 then notify("Gear: 3 cycle no boss — hop") hopToPopulatedServer() fails=0 task.wait(10) end end task.wait(1) continue end tpTo(boss) task.wait(0.3) local t0=os.clock() while Sword.gearV2 and (os.clock()-t0)<90 do local vh=boss:FindFirstChild("HumanoidRootPart") local vhu=boss:FindFirstChild("Humanoid") if not vh or not vhu or vhu.Health<=0 then break end local h=hrp() if h and vh:IsA("BasePart") then h.CFrame=vh.CFrame*CFrame.new(0,3,-4) swing(equip("sword") or equip("melee")) fireSkills({"Z","X","C","V"},0.08) end task.wait(0.2) end task.wait(0.5) for _,fn in ipairs({"Drops","ItemDrops","Fruits"}) do local f=WS:FindFirstChild(fn) if f then for _,v in ipairs(f:GetChildren()) do if isDrop(v.Name) or isFruit(v.Name) then grabObject(v) end end end end i=i%#bosses+1 task.wait(1) end end
 
--- ─── nearest + lookahead ──────────────────────────────────────
-local function nearestIdx(p: Vec3): number
-    local n = #spline
-    if n == 0 then return 1 end
-    local best, bi = math.huge, lastSplineIdx
-    local lo = math.max(1, lastSplineIdx - NEAREST_WINDOW)
-    local hi = math.min(n, lastSplineIdx + NEAREST_WINDOW)
-    for i = lo, hi do
-        local d = (spline[i].pos - p).Magnitude
-        if d < best then best, bi = d, i end
-    end
-    if best > FAR_JUMP then
-        for i = 1, n do
-            local d = (spline[i].pos - p).Magnitude
-            if d < best then best, bi = d, i end
-        end
-    end
-    lastSplineIdx = bi
-    return bi
-end
+local function makeRaceV3Boost(raceName) return function() local attempt,MAX=0,60 local routeName="v3_"..raceName while S.autoRaceV3 and S.raceV3Target==raceName and attempt<MAX do attempt=attempt+1 if raceV3Complete() then notify("V3 "..raceName..": SUCCESS") S.autoRaceV3=false break end local ancient=findNPCAny({"Ancient","Ancient One","Trial","Arowe"}) if ancient then tpTo(ancient) task.wait(0.6) firePPsNear(30) pcall(function() CommF:InvokeServer("RaceV3") end) pcall(function() CommF:InvokeServer("Race","V3") end) pcall(function() CommF:InvokeServer("RaceV3Trial") end) end if V9._routes[routeName] and #V9._routes[routeName]>0 then startAutoRecord() replayRoute(routeName) if raceV3Complete() then S.autoRaceV3=false break end end startAutoRecord() local trialStart=os.clock() local savedJump,savedWalk,savedInf=S.jumpPower,S.walkSpeed,S.infJump while S.autoRaceV3 and S.raceV3Target==raceName and (os.clock()-trialStart)<240 do if raceV3Complete() then break end local h,hh=hrp(),hum() if raceName=="Human" then local target=nearestPlayer(2000) if target and h then h.CFrame=target.hrp.CFrame*CFrame.new(0,3,-5) faceTarget(target.hrp) fireSkills({"Z","X","C","V"},0.1) end elseif raceName=="Rabbit" then S.infJump=true S.jumpPower=250 S.walkSpeed=150 if h then for _,v in ipairs(WS:GetChildren()) do if v:IsA("BasePart") and (v.Name:lower():find("plat") or v.Name:lower():find("block") or v.Name:lower():find("cloud")) then if (v.Position-h.Position).Magnitude<50 and v.Position.Y>h.Position.Y then h.CFrame=CFrame.new(v.Position+Vector3.new(0,3,0)) break end end end end elseif raceName=="Cyborg" then S.fly=true S.flySpeed=200 if h then local cam=WS.CurrentCamera if cam then h.CFrame=h.CFrame+cam.CFrame.LookVector*25 end end elseif raceName=="Mink" then S.walkSpeed=280 S.infJump=true if h then h.CFrame=h.CFrame+h.CFrame.LookVector*20 end elseif raceName=="Fishman" then S.waterWalk=true S.walkSpeed=200 if h then h.CFrame=h.CFrame*CFrame.new(0,-2,0) end elseif raceName=="Ghoul" then local fr=equip("fruit") if fr and fr:FindFirstChild("Click") then pcall(function() fr.Click:FireServer() end) end firePPsNear(50) elseif raceName=="Angel" then firePPsNear(60) sendKey("R") end if hh and hh.Health<hh.MaxHealth*0.7 then sendKey("C") sendKey("V") end local e,d=nearestEnemy(30) if e and d and d<20 then sendKey("Q") end firePPsNear(40) task.wait(0.3) end S.jumpPower=savedJump S.walkSpeed=savedWalk S.infJump=savedInf if raceV3Complete() then stopAutoRecord(routeName) notify("V3 "..raceName..": SUCCESS") S.autoRaceV3=false break else _recordingActive=false end local a2=findNPCAny({"Ancient","Ancient One"}) if a2 then tpTo(a2) task.wait(0.4) firePPsNear(25) pcall(function() CommF:InvokeServer("RaceV3") end) end if waitFor(raceV3Complete,3) then S.autoRaceV3=false break end notify("V3 "..raceName..": attempt "..attempt.." fail") if attempt%3==0 then hopToPopulatedServer() end task.wait(3) end if S.autoRaceV3 and S.raceV3Target==raceName then notify("V3 "..raceName..": max") S.autoRaceV3=false end end end
 
-local function lookaheadPoint(fromIdx: number, dist: number): (Vec3?, number)
-    local n = #spline
-    if n < 2 then return nil, fromIdx end
-    local acc, i = 0, fromIdx
-    while i < n do
-        local seg = (spline[i+1].pos - spline[i].pos).Magnitude
-        if acc + seg >= dist then
-            return spline[i].pos:Lerp(spline[i+1].pos, (dist - acc) / seg), i
-        end
-        acc = acc + seg
-        i = i + 1
-    end
-    return spline[n].pos, n
-end
+local function makeRaceV4Boost(raceName) return function() local attempt,MAX=0,100 local routeName="race_v4_"..raceName while S.autoRaceV4 and S.raceV3Target==raceName and attempt<MAX do attempt=attempt+1 if raceV4CompleteV3() then notify("V4 "..raceName..": SUCCESS — "..(V4_TITLES[raceName] or "?")) S.autoRaceV4=false break end if not ensureBlueGear() then notify("V4 "..raceName..": no Blue Gear") task.wait(3) continue end if not ensureMirrorFractal() then notify("V4 "..raceName..": no Mirror") task.wait(3) continue end local myRace=tostring(LP:GetAttribute("Race") or "?"):lower() local party={} for _,e in ipairs(getPlayers()) do local r="?" local attr=e.plr:GetAttribute("Race") if attr then r=tostring(attr):lower() elseif e.plr:FindFirstChild("Race") and e.plr.Race:IsA("StringValue") then r=e.plr.Race.Value:lower() end if r~="?" and r~=myRace then local v3ok=false for _,n in ipairs({"RaceV3","RaceV3Done","RaceStage","RaceLevel"}) do local v=e.plr:GetAttribute(n) if type(v)=="number" and v>=3 then v3ok=true break end end local candBp=e.plr:FindFirstChild("Backpack") local candBlue=candBp and (candBp:FindFirstChild("Blue Gear") or candBp:FindFirstChild("BlueGear")) if v3ok and candBlue then table.insert(party,e) end end end if #party<2 then notify("V4 "..raceName..": party "..#party.."/2 — hop") pcall(function() local ce=RS:FindFirstChild("DefaultChatSystemChatEvents") local say=ce and ce:FindFirstChild("SayMessageRequest") if say then say:FireServer("V4 trial need 2 more race V3+ with Blue Gear pls","All") end end) hopToPopulatedServer() task.wait(10) continue end notify("V4 "..raceName..": party OK — wait moon") if not waitForFullMoon(600) then notify("V4 "..raceName..": moon timeout") hopToPopulatedServer() task.wait(5) continue end local temple=findNPCAny({"Temple","Time","Temple of Time"}) if temple then tpTo(temple) task.wait(0.5) end for _,v in ipairs(WS:GetDescendants()) do if v:IsA("ProximityPrompt") and v.Enabled then local blob=tostring(v.ActionText or ""):lower()..tostring(v.ObjectText or ""):lower() if blob:find("pull") or blob:find("lever") or blob:find("strength") then local pp=v.Parent local h=hrp() if h and pp and pp:IsA("BasePart") then h.CFrame=pp.Position+Vector3.new(0,3,0) task.wait(0.2) pcall(function() fireproximityprompt(v) end) end end end end if raceName=="Angel" then local sg=equip("Soul Guitar") if sg then pcall(function() sg.Parent=LP.Character end) sendKey("X") task.wait(0.15) end end for _=1,10 do sendKey("R") pcall(function() CommF:InvokeServer("Race","V3") end) pcall(function() CommF:InvokeServer("ActivateRaceV3") end) pcall(function() CommF:InvokeServer("RaceV4") end) firePPsNear(30) task.wait(0.25) end if raceName=="Angel" then local cdk=equip("Cursed Dual Katana") if cdk then pcall(function() cdk.Parent=LP.Character end) sendKey("X") task.wait(0.2) sendKey("X") end end startAutoRecord() local trialStart=os.clock() while S.autoRaceV4 and S.raceV3Target==raceName and (os.clock()-trialStart)<300 do if raceV4CompleteV3() then break end local h,hh=hrp(),hum() if h and hh then local bestCloud,bestDist=nil,120 for _,top in ipairs(WS:GetChildren()) do for _,v in ipairs(top:GetChildren()) do if v:IsA("BasePart") then local n=v.Name:lower() if n:find("cloud") or n:find("platform") or n:find("sky") or n:find("knight") or n:find("king") then local d=(v.Position-h.Position).Magnitude if d<bestDist and v.Position.Y>h.Position.Y-10 then bestCloud,bestDist=v,d end end end end end if bestCloud then h.CFrame=CFrame.new(bestCloud.Position+Vector3.new(0,4,0)) pcall(function() hh:ChangeState(Enum.HumanoidStateType.Jumping) end) else for _,v in ipairs(WS:GetChildren()) do if v:IsA("BasePart") and v.Position.Y>h.Position.Y+5 and (v.Position-h.Position).Magnitude<80 then h.CFrame=CFrame.new(v.Position+Vector3.new(0,4,0)) break end end end local ratio=hh.Health/hh.MaxHealth if ratio<0.75 then sendKey("C") task.wait(0.05) sendKey("V") sendKey("R") end local e,d=nearestEnemy(40) if e and d and d<25 then sendKey("Q") local vh=e:FindFirstChild("HumanoidRootPart") if vh and vh:IsA("BasePart") then h.CFrame=h.CFrame+((h.Position-vh.Position).Unit*12) end end firePPsNear(60) end task.wait(0.15) end if raceV4CompleteV3() then stopAutoRecord(routeName) notify("V4 "..raceName..": trial SUCCESS") S.autoRaceV4=false break else _recordingActive=false end local ffaStart=os.clock() while S.autoRaceV4 and S.raceV3Target==raceName and (os.clock()-ffaStart)<180 do if raceV4CompleteV3() then break end local target=nearestPlayer(2000) if target then local h=hrp() if h then h.CFrame=target.hrp.CFrame*CFrame.new(0,3,-5) end faceTarget(target.hrp) fireSkills({"Z","X","C","V"},0.1) if S.autoBuso then sendKey("J") end end local hh=hum() if hh and hh.Health<hh.MaxHealth*0.7 then sendKey("C") sendKey("V") end firePPsNear(80) task.wait(0.3) end local clock=findNPCAny({"Ancient Clock","Clock","Acrius"}) if clock then tpTo(clock) task.wait(0.5) firePPsNear(40) for _,rn in ipairs({"PlaceGear","AncientClock","RaceV4Complete","RaceV4"}) do pcall(function() CommF:InvokeServer(rn) end) pcall(function() CommF:InvokeServer("AncientClock",rn) end) end sendKey("Y") task.wait(0.5) end if waitFor(raceV4CompleteV3,4) then notify("V4 "..raceName..": SUCCESS via clock") S.autoRaceV4=false break end notify("V4 "..raceName..": attempt "..attempt.." fail — hop") hopToPopulatedServer() task.wait(8) end if S.autoRaceV4 and S.raceV3Target==raceName then notify("V4 "..raceName..": max") S.autoRaceV4=false end end end
 
-local function drive(v: Vehicle, target: Vec3, throttle: number)
-    local seat = v.seat
-    if not seat or not seat.Parent then return end
-    local ok, lt = pcall(function()
-        return seat.CFrame:PointToObjectSpace(target)
-    end)
-    if not ok then return end
-    local steer = math.clamp(lt.X / math.max(math.abs(lt.Z), 1), -1, 1)
-    seat.Steer = steer
-    seat.Throttle = throttle
-end
+local function dracoSoloV16() local race=tostring(LP:GetAttribute("Race") or ""):lower() if not race:find("draco") and not race:find("dragon") then notify("Draco: race bukan Draco") S.autoDracoV4=false return end if hasV4Title("Draco") then notify("Draco: V4 owned") S.autoDracoV4=false return end local need={"Dragon Talon","Dragonheart","Dragonstorm"} local lacking=nil for _,s in ipairs(need) do if (readMastery(s) or 0)<500 then lacking=s break end end if lacking then notify("Draco: grind "..lacking) local isl=islandForLevel() local h=hrp() if h and isl then h.CFrame=isl.cf end local t=equip(lacking) or equip(lacking:lower()) if t and h then local f=enemiesFolder() if f then for _,v in ipairs(f:GetChildren()) do local vh=v:FindFirstChild("HumanoidRootPart") local vhu=v:FindFirstChild("Humanoid") if vh and vh:IsA("BasePart") and vhu and vhu:IsA("Humanoid") and vhu.Health>0 then h.CFrame=vh.CFrame*CFrame.new(0,3,-3) if t:FindFirstChild("Click") then pcall(function() t.Click:FireServer() end) end for _,k in ipairs({"Z","X","C","V"}) do sendKey(k) task.wait(0.05) end break end end end end task.wait(1) S.autoDracoV4=false return end local frozen=false for _,v in ipairs(WS:GetDescendants()) do local n=v.Name:lower() if n:find("frozen") or n:find("ice") then if v:IsA("BasePart") or v:IsA("Model") then frozen=true break end end end if not frozen then notify("Draco: Hydra not frozen") if hasItemNamed("Leviathan Heart") then local h=hrp() if h then h.CFrame=CFrame.new(-9500,100,5500) end task.wait(1) firePPsNear(50) pcall(function() CommF:InvokeServer("Leviathan","PlaceHeart") end) else hopToPopulatedServer() end task.wait(2) S.autoDracoV4=false return end local h=hrp() if h then h.CFrame=CFrame.new(5500,50,-6500) end task.wait(1) for _=1,3 do firePPsNear(60) task.wait(0.5) end local statue=findNPCAny({"Statue","Dragon Statue","Flame Statue"}) if statue then tpTo(statue) task.wait(0.6) firePPsNear(30) end pcall(function() CommF:InvokeServer("TrialOfFlames","Start") end) pcall(function() CommF:InvokeServer("DracoTrial") end) task.wait(1) startAutoRecord() local trialStart=os.clock() while S.autoDracoV4 and (os.clock()-trialStart)<300 do if hasV4Title("Draco") then break end local hh=hrp() if not hh then task.wait(0.5) continue end local relic=nil for _,top in ipairs(WS:GetChildren()) do for _,v in ipairs(top:GetChildren()) do if v:IsA("BasePart") or v:IsA("Model") then local n=v.Name:lower() if n:find("relic") or n:find("flame relic") or n:find("artifact") then relic=v break end end end if relic then break end end if relic then local pos if relic:IsA("BasePart") then pos=relic.Position elseif relic:IsA("Model") then pos=relic:GetPivot().Position end if pos then hh.CFrame=CFrame.new(pos+Vector3.new(0,3,0)) task.wait(0.3) for _,d in ipairs(relic:GetDescendants()) do if d:IsA("ProximityPrompt") and d.Enabled then pcall(function() fireproximityprompt(d) end) end end firePPsNear(20) end end local ext=nil for _,top in ipairs(WS:GetChildren()) do for _,v in ipairs(top:GetChildren()) do if (v:IsA("BasePart") or v:IsA("Model")) and v.Name:lower():find("extract",1,true) then ext=v break end end if ext then break end end if ext then local pos if ext:IsA("BasePart") then pos=ext.Position elseif ext:IsA("Model") then pos=ext:GetPivot().Position end if pos then hh.CFrame=CFrame.new(pos+Vector3.new(0,3,0)) task.wait(0.3) for _,d in ipairs(ext:GetDescendants()) do if d:IsA("ProximityPrompt") and d.Enabled then pcall(function() fireproximityprompt(d) end) end end firePPsNear(20) end end task.wait(0.4) end if hasV4Title("Draco") then stopAutoRecord("draco_v4") notify("Draco V4: SUCCESS") S.autoDracoV4=false else _recordingActive=false _recordBuf={} notify("Draco V4: trial fail") S.autoDracoV4=false end end
 
--- ─── scan pipeline ─────────────────────────────────────────────
-local function performScan(): (boolean, string)
-    local now = os.clock()
-    if now - lastScanAt < SCAN_COOLDOWN then
-        return false, "cooldown, wait a moment"
-    end
-    lastScanAt = now
+local function masterLoop() V10._cycle=0 notify("MASTER:start",4) while V10.masterAuto do V10._cycle=V10._cycle+1 if V10._cycle>V10._maxCycle then notify("MASTER:max "..progressStr(),8) V10.masterAuto=false break end if everythingDone() then notify("MASTER:DONE "..progressStr(),10) V10.masterAuto=false break end notify("MASTER:"..V10._cycle.." "..progressStr(),3) if not hasHolyTorch() then V8.autoHolyTorch=true if not _runningLoops["auto_torch"] then startLoop("auto_torch",autoHolyTorchLoop) end elseif not hasTushita() and hasHolyTorch() then V8.autoTushita=true if not _runningLoops["auto_tushita"] then startLoop("auto_tushita",autoTushitaV2Loop) end elseif not hasYama() then V8.autoYama=true if not _runningLoops["auto_yama"] then startLoop("auto_yama",autoYamaV2Loop) end elseif not hasCDK() and hasYama() and hasTushita() then local y=readMastery("Yama") or 0 local t=readMastery("Tushita") or 0 if y>=350 and t>=350 then V8.autoCDK=true if not _runningLoops["auto_cdk"] then startLoop("auto_cdk",autoCDKV2Loop) end end elseif not raceV2Complete() then S.autoRaceV2=true if not _runningLoops["auto_rv2"] then startLoop("auto_rv2",autoRaceV2Loop) end elseif not raceV3Complete() then S.autoRaceV3=true local v3key="v3_"..S.raceV3Target if not _runningLoops[v3key] then startLoop(v3key,makeRaceV3Boost(S.raceV3Target)) end elseif not raceV4CompleteV3() then local rn=S.raceV3Target if rn=="Draco" then S.autoDracoV4=true if not _runningLoops["draco_v4"] then startLoop("draco_v4",dracoSoloV16) end else S.autoRaceV4=true local v4key="v4_"..rn if not _runningLoops[v4key] then startLoop(v4key,makeRaceV4Boost(rn)) end end elseif not allFSBought() then V8.autoFSCascade=true if not _runningLoops["auto_fs"] then startLoop("auto_fs",autoFSCascadeLoopV3) end end if V10.masterBossFarm and not _runningLoops["auto_boss"] then V8.autoBossDrop=true startLoop("auto_boss",autoBossDropV2Loop) end if V10.masterFruitFarm and not _runningLoops["auto_fruit"] then V8.autoFruitSniper=true startLoop("auto_fruit",autoFruitSniperLoop) end task.wait(5) end V10._status="off" notify("MASTER:off") end
+local function masterStop() V10.masterAuto=false V10.masterBossFarm=false V10.masterFruitFarm=false V8.autoHolyTorch=false V8.autoTushita=false V8.autoYama=false V8.autoCDK=false V8.autoHaze=false S.autoRaceV2=false S.autoRaceV3=false S.autoRaceV4=false S.autoDracoV4=false V8.autoFSCascade=false V8.autoBossDrop=false V8.autoFruitSniper=false Sword.gearV2=false for k in pairs(_runningLoops) do _runningLoops[k]=nil end end
 
-    local veh = getVehicle()
-    local startPos = veh and veh.position or nil
-    local nodes = scanTrackNodes()
-    if #nodes < 4 then
-        return false, ("only %d candidate nodes — track may use unique names"):format(#nodes)
-    end
+RunSvc.Heartbeat:Connect(function() if not S.killAura then return end local now=os.clock() if now-S._lastKaSwing<0.05 then return end S._lastKaSwing=now local h=hrp() if not h then return end local f=enemiesFolder() if not f then return end for _,v in ipairs(f:GetChildren()) do local vh=v:FindFirstChild("HumanoidRootPart") local vhu=v:FindFirstChild("Humanoid") if vh and vh:IsA("BasePart") and vhu and vhu:IsA("Humanoid") and vhu.Health>0 and (vh.Position-h.Position).Magnitude<=S.kaRange then h.CFrame=vh.CFrame*CFrame.new(0,3,-4) swing(equip("sword") or equip("melee")) break end end end)
+RunSvc.RenderStepped:Connect(function() if not S.aimbot then return end local h=hrp() if not h then return end local cam=WS.CurrentCamera if not cam then return end local b=nil local bd=S.aimFov local f=enemiesFolder() if not f then return end local c=Vector2.new(cam.ViewportSize.X/2,cam.ViewportSize.Y/2) for _,v in ipairs(f:GetChildren()) do local vh=v:FindFirstChild("HumanoidRootPart") local vhu=v:FindFirstChild("Humanoid") if vh and vh:IsA("BasePart") and vhu and vhu:IsA("Humanoid") and vhu.Health>0 then local sp,on=cam:WorldToViewportPoint(vh.Position) if on then local d=(Vector2.new(sp.X,sp.Y)-c).Magnitude if d<bd then b,bd=vh,d end end end end if b then h.CFrame=CFrame.new(h.Position,Vector3.new(b.Position.X,h.Position.Y,b.Position.Z)) end end)
+task.spawn(function() while true do task.wait(0.5) local f=enemiesFolder() if f then for _,v in ipairs(f:GetChildren()) do local vh=v:FindFirstChild("HumanoidRootPart") if vh and vh:IsA("BasePart") then if S.mobBring then local h=hrp() local vhu=v:FindFirstChild("Humanoid") if h and vhu and vhu:IsA("Humanoid") and vhu.Health>0 then if (vh.Position-h.Position).Magnitude<80 then vh.CFrame=h.CFrame*CFrame.new(0,0,-4) end end end if S.hitbox then local tg=Vector3.new(S.hitboxSize,S.hitboxSize,S.hitboxSize) if vh.Size~=tg then vh.Size=tg end end end end end end end)
+RunSvc.RenderStepped:Connect(function() if not Drawing then return end local cam=WS.CurrentCamera if not cam then return end local f=enemiesFolder() if S.espEnemy and f then for _,v in ipairs(f:GetChildren()) do local vh=v:FindFirstChild("HumanoidRootPart") local vhu=v:FindFirstChild("Humanoid") if vh and vh:IsA("BasePart") and vhu and vhu:IsA("Humanoid") and vhu.Health>0 then espAdd(v,Color3.fromRGB(255,60,60)) local e=ESP[v] local sp,on=cam:WorldToViewportPoint(vh.Position) if e and on then local d=(vh.Position-cam.CFrame.Position).Magnitude local hh=math.clamp(1800/d,10,200) local w=hh*0.5 e.box.Size=Vector2.new(w,hh) e.box.Position=Vector2.new(sp.X-w/2,sp.Y-hh/2) e.box.Visible=true e.txt.Position=Vector2.new(sp.X,sp.Y-hh/2-14) e.txt.Text=string.format("%s[%d]",v.Name,math.floor(d)) e.txt.Visible=true elseif e then e.box.Visible=false e.txt.Visible=false end else espClear(v) end end end if S.espFruit then local fr=WS:FindFirstChild("Fruits") if fr then for _,v in ipairs(fr:GetChildren()) do local ha=v:FindFirstChild("Handle") if ha and ha:IsA("BasePart") then espAdd(v,Color3.fromRGB(0,255,120)) local e=ESP[v] local sp,on=cam:WorldToViewportPoint(ha.Position) if e and on then e.txt.Text="FRUIT:"..v.Name e.txt.Position=Vector2.new(sp.X,sp.Y) e.txt.Visible=true e.box.Visible=false elseif e then e.txt.Visible=false end end end end end if S.espChest then for _,fn in ipairs({"Chests","ChestFolderValueReference"}) do local fo=WS:FindFirstChild(fn) if fo then for _,v in ipairs(fo:GetChildren()) do local pos if v:IsA("BasePart") then pos=v.Position else local hr=v:FindFirstChild("HumanoidRootPart") if hr and hr:IsA("BasePart") then pos=hr.Position end end if pos then espAdd(v,Color3.fromRGB(255,200,0)) local e=ESP[v] local sp,on=cam:WorldToViewportPoint(pos) if e and on then e.txt.Text="CHEST" e.txt.Position=Vector2.new(sp.X,sp.Y) e.txt.Visible=true e.box.Visible=false elseif e then e.txt.Visible=false end end end end end end if S.espPlayer then for _,p in ipairs(Players:GetPlayers()) do if p~=LP and p.Character then local vh=p.Character:FindFirstChild("HumanoidRootPart") if vh and vh:IsA("BasePart") then espAdd(p.Character,Color3.fromRGB(80,160,255)) local e=ESP[p.Character] local sp,on=cam:WorldToViewportPoint(vh.Position) if e and on then e.txt.Text=p.Name e.txt.Position=Vector2.new(sp.X,sp.Y-30) e.txt.Visible=true e.box.Visible=false elseif e then e.txt.Visible=false end end end end end local orph={} for o in pairs(ESP) do if not o.Parent then table.insert(orph,o) end end for _,o in ipairs(orph) do espClear(o) end end)
+RunSvc.Stepped:Connect(function() local h=hum() if h then h.WalkSpeed=S.walkSpeed h.JumpPower=S.jumpPower end if S.noclip then local c=LP.Character if c then for _,v in ipairs(c:GetDescendants()) do if v:IsA("BasePart") then v.CanCollide=false end end end end if S.waterWalk then local p=hrp() if p then if not S._waterPlatform or not S._waterPlatform.Parent then local plat=Instance.new("Part") plat.Name="JFWater" plat.Size=Vector3.new(8,1,8) plat.Anchored=true plat.Transparency=1 plat.CanCollide=true plat.Parent=WS S._waterPlatform=plat end S._waterPlatform.CFrame=p.CFrame*CFrame.new(0,-3,0) end elseif S._waterPlatform then S._waterPlatform:Destroy() S._waterPlatform=nil end end)
+UIS.JumpRequest:Connect(function() if S.infJump then local h=hum() if h then h:ChangeState(Enum.HumanoidStateType.Jumping) end end end)
+RunSvc.Heartbeat:Connect(function() if S.fly then local h=hrp() if not h then return end if not S._flyBV or not S._flyBV.Parent then local bv=Instance.new("BodyVelocity") bv.MaxForce=Vector3.new(1e5,1e5,1e5) bv.Velocity=Vector3.zero bv.Parent=h S._flyBV=bv end local cam=WS.CurrentCamera if cam then S._flyBV.Velocity=cam.CFrame.LookVector*S.flySpeed end elseif S._flyBV then S._flyBV:Destroy() S._flyBV=nil end end)
+RunSvc.RenderStepped:Connect(function() if not (S.silentAim or S.skillAimbot) then return end local t=nearestPlayer(S.aimFov) if not t then return end local pred=predictedPos(t.hrp,S.aimPrediction) local h=hrp() if not h then return end h.CFrame=CFrame.new(h.Position,Vector3.new(pred.X,h.Position.Y,pred.Z)) if S.skillAimbot then local now=os.clock() if now-S._lastSkillFire>0.35 then S._lastSkillFire=now fireSkills(S.comboSkills,S.comboDelay) end end end)
+RunSvc.Heartbeat:Connect(function() if not S.autoRetaliate then return end local h=hum() if not h then return end if S._lastHealth and h.Health<S._lastHealth then local t=nearestPlayer(50) if t then faceTarget(t.hrp) fireSkills(S.comboSkills,S.comboDelay) end end S._lastHealth=h.Health end)
+RunSvc.Stepped:Connect(function() if S.invisible then local c=LP.Character if c then for _,v in ipairs(c:GetDescendants()) do if v:IsA("BasePart") and v.Name~="HumanoidRootPart" then v.LocalTransparencyModifier=0.5 end end end end if S.antiAim then local h=hrp() if h then h.CFrame=h.CFrame*CFrame.Angles(0,math.rad(math.random(-180,180)),0) end end end)
+RunSvc.Heartbeat:Connect(function() if not V9._recording then return end local h=hrp() local hh=hum() if not h or not hh then return end table.insert(V9._recordBuf,{t=os.clock()-V9._recordStart,cf=h.CFrame,hum=tostring(hh:GetState())}) end)
+RunSvc.RenderStepped:Connect(function() if not V7.showDashboard or not Drawing then return end V7._dashFrames=V7._dashFrames+1 local now=os.clock() if now-V7._dashLastSec>=1 then V7._dashFps=V7._dashFrames/(now-V7._dashLastSec) V7._dashFrames=0 V7._dashLastSec=now end if not V7._dashCreated then local d=Drawing.new("Text") d.Size=14 d.Color=Color3.fromRGB(0,255,120) d.Outline=true d.Position=Vector2.new(10,10) d.Visible=true V7._dash=d V7._dashCreated=true end local p=hrp() local pos=p and p.Position or Vector3.zero local vel=p and p.AssemblyLinearVelocity.Magnitude or 0 local txt=string.format("JF v16.3|Lv:%d|Spd:%.1f|FPS:%d|Ping:%d\nXYZ:%d,%d,%d",playerLevel(),vel,math.floor(V7._dashFps),getPingMs(),math.floor(pos.X),math.floor(pos.Y),math.floor(pos.Z)) if V7._dash then V7._dash.Text=txt end end)
+UIS.InputBegan:Connect(function(input,processed) if processed then return end local kc=Enum.KeyCode[V7.panicKey] if kc and input.KeyCode==kc then panicSky() end end)
+local function startRecord(name) V9._recording=true V9._recordBuf={} V9._recordStart=os.clock() V9._recordName=name notify("Rec:"..name) end
+local function stopRecord() if not V9._recording then return end V9._recording=false if #V9._recordBuf>0 then V9._routes[V9._recordName]=V9._recordBuf notify("Saved "..#V9._recordBuf) else notify("empty") end end
+local function playRoute(name) local rt=V9._routes[name] if not rt or #rt==0 then notify("no route") return false end V9._playing=true local st=os.clock() for _,f in ipairs(rt) do if not V9._playing then return false end local el=os.clock()-st if el<f.t then task.wait(f.t-el) end local h,hh=hrp(),hum() if not h or not hh then task.wait(0.1) continue end h.CFrame=f.cf if f.hum:find("Jumping") or f.hum:find("Freefall") then pcall(function() hh:ChangeState(Enum.HumanoidStateType.Jumping) end) end end V9._playing=false return true end
 
-    local chain = buildChain(nodes, startPos)
-    if #chain < 4 then
-        return false, "ordering failed — cannot chain nodes"
-    end
+local FarmTab=Window:CreateTab("Farm",4483362458)
+FarmTab:CreateInput({Name="Mob name",CurrentValue="Bandit",Callback=function(v) S.mob=v end})
+FarmTab:CreateToggle({Name="Autofarm",CurrentValue=false,Callback=function(v) S.autofarm=v if v then startLoop("autofarm",autofarmLoop) end end})
+FarmTab:CreateToggle({Name="Auto quest",CurrentValue=true,Callback=function(v) S.autoQuest=v end})
+FarmTab:CreateInput({Name="Quest override",Callback=function(v) S.questName=v end})
+local RaidTab=Window:CreateTab("Raid",4483362458)
+RaidTab:CreateToggle({Name="Auto raid",Callback=function(v) S.autoRaid=v if v then startLoop("raid",autoRaidLoop) end end})
+RaidTab:CreateToggle({Name="Auto chip",Callback=function(v) S.autoChip=v end})
+RaidTab:CreateSlider({Name="Island",Range={1,5},Increment=1,CurrentValue=1,Callback=function(v) S.raidIsland=v end})
+local FruitTab=Window:CreateTab("Fruit",4483362458)
+FruitTab:CreateToggle({Name="Fruit sniper",Callback=function(v) S.fruitSniper=v if v then startLoop("fruitsniper",fruitSniperLoop) end end})
+FruitTab:CreateToggle({Name="Hop if empty",Callback=function(v) S.fruitHop=v end})
+local CombatTab=Window:CreateTab("Combat",4483362458)
+CombatTab:CreateSlider({Name="KA range",Range={0,200},Increment=5,CurrentValue=45,Callback=function(v) S.kaRange=v end})
+CombatTab:CreateToggle({Name="Kill aura",Callback=function(v) S.killAura=v end})
+CombatTab:CreateToggle({Name="Fast attack",Callback=function(v) S.fastAttack=v if v then startLoop("fastattack",fastAttackLoop) end end})
+CombatTab:CreateSlider({Name="FA delay",Range={0.01,0.2},Increment=0.01,CurrentValue=0.05,Callback=function(v) S.fastDelay=v end})
+CombatTab:CreateToggle({Name="Aimbot",Callback=function(v) S.aimbot=v end})
+CombatTab:CreateSlider({Name="Aim FOV",Range={50,500},Increment=10,CurrentValue=200,Callback=function(v) S.aimFov=v end})
+CombatTab:CreateInput({Name="Skill key",CurrentValue="Z",Callback=function(v) S.skillKey=v end})
+CombatTab:CreateToggle({Name="Auto skill",Callback=function(v) S.autoSkill=v end})
+CombatTab:CreateToggle({Name="Auto Buso",Callback=function(v) S.autoBuso=v end})
+CombatTab:CreateToggle({Name="Auto Ken",Callback=function(v) S.autoKen=v end})
+CombatTab:CreateToggle({Name="Auto dodge",Callback=function(v) S.autoDodge=v if v then startLoop("dodge",autoDodgeLoop) end end})
+CombatTab:CreateInput({Name="Dodge key",CurrentValue="Q",Callback=function(v) S.dodgeKey=v end})
+CombatTab:CreateToggle({Name="Hitbox",Callback=function(v) S.hitbox=v end})
+CombatTab:CreateSlider({Name="Hitbox size",Range={2,20},Increment=1,CurrentValue=10,Callback=function(v) S.hitboxSize=v end})
+CombatTab:CreateToggle({Name="Mob bring",Callback=function(v) S.mobBring=v end})
+local VisTab=Window:CreateTab("Visuals",4483362458)
+VisTab:CreateToggle({Name="ESP Enemies",Callback=function(v) S.espEnemy=v end})
+VisTab:CreateToggle({Name="ESP Fruits",Callback=function(v) S.espFruit=v end})
+VisTab:CreateToggle({Name="ESP Chests",Callback=function(v) S.espChest=v end})
+VisTab:CreateToggle({Name="ESP Players",Callback=function(v) S.espPlayer=v end})
+local TPTab=Window:CreateTab("Teleport",4483362458)
+for name,cf in pairs({["Sea1"]=CFrame.new(0,10,0),["Sea2"]=CFrame.new(2000,10,0),["Sea3"]=CFrame.new(0,10,2000)}) do local c=cf TPTab:CreateButton({Name="TP "..name,Callback=function() local h=hrp() if h then h.CFrame=c end end}) end
+TPTab:CreateInput({Name="X",CurrentValue="0",Callback=function(v) S._tx=tonumber(v) or 0 end})
+TPTab:CreateInput({Name="Y",CurrentValue="10",Callback=function(v) S._ty=tonumber(v) or 10 end})
+TPTab:CreateInput({Name="Z",CurrentValue="0",Callback=function(v) S._tz=tonumber(v) or 0 end})
+TPTab:CreateButton({Name="TP custom",Callback=function() local h=hrp() if h then h.CFrame=CFrame.new(S._tx,S._ty,S._tz) end end})
+local MoveTab=Window:CreateTab("Movement",4483362458)
+MoveTab:CreateSlider({Name="WalkSpeed",Range={16,300},Increment=1,CurrentValue=16,Callback=function(v) S.walkSpeed=v end})
+MoveTab:CreateSlider({Name="JumpPower",Range={50,300},Increment=5,CurrentValue=50,Callback=function(v) S.jumpPower=v end})
+MoveTab:CreateToggle({Name="Inf Jump",Callback=function(v) S.infJump=v end})
+MoveTab:CreateToggle({Name="Noclip",Callback=function(v) S.noclip=v end})
+MoveTab:CreateToggle({Name="Fly",Callback=function(v) S.fly=v end})
+MoveTab:CreateSlider({Name="Fly speed",Range={20,200},Increment=10,CurrentValue=50,Callback=function(v) S.flySpeed=v end})
+MoveTab:CreateToggle({Name="Water walk",Callback=function(v) S.waterWalk=v end})
+local FSTab=Window:CreateTab("Fighting Style",4483362458)
+for _,s in ipairs(FS_LIST) do local kk,rr=s.k,s.r FSTab:CreateToggle({Name="Auto buy "..kk,Callback=function(v) _fsFlags[kk]=v if v then startLoop("fs_"..kk,function() fsLoop(kk,rr) end) end end}) end
+local RaceTab=Window:CreateTab("Race Progression",4483362458)
+RaceTab:CreateToggle({Name="Auto V2 Alchemist",Callback=function(v) S.autoRaceV2=v if v then startLoop("racev2",raceV2Loop) end end})
+RaceTab:CreateButton({Name="TP Alchemist",Callback=function() local n=findNPC("Alchemist") if n then tpTo(n) notify("TP alch") else notify("kosong") end end})
+RaceTab:CreateButton({Name="TP Ancient",Callback=function() local n=findNPCAny({"Ancient","Ancient One","Trial"}) if n then tpTo(n) notify("TP anc") else notify("kosong") end end})
+RaceTab:CreateButton({Name="TP Temple",Callback=function() local t=findNPCAny({"Temple","Time","Temple of Time"}) if t then tpTo(t) notify("TP tpl") else notify("kosong") end end})
+RaceTab:CreateButton({Name="Invite Alt (chat 5x)",Callback=function() for _=1,5 do pcall(function() local ce=RS:FindFirstChild("DefaultChatSystemChatEvents") local say=ce and ce:FindFirstChild("SayMessageRequest") if say then say:FireServer("V4 trial need 2 race V3+ Blue Gear pls join me","All") end end) task.wait(2) end notify("invited") end})
+local GHTab=Window:CreateTab("GH Grind",4483362458)
+GHTab:CreateSlider({Name="Target mastery",Range={300,600},Increment=50,CurrentValue=400,Callback=function(v) S.ghTarget=v end})
+GHTab:CreateToggle({Name="Auto GH grind",Callback=function(v) S.ghGrind=v if v then startLoop("ghgrind",ghGrindLoop) end end})
+GHTab:CreateButton({Name="Show mastery",Callback=function() local o=ownedSorted() if #o==0 then notify("no style") return end local p={} for _,s in ipairs(o) do table.insert(p,s.."="..mastery(s)) end notify(table.concat(p,"|"),8) end})
+local AGTab=Window:CreateTab("AutoGet",4483362458)
+AGTab:CreateToggle({Name="Master AutoGet",Callback=function(v) S.agRunning=v if v then if V8._agFruit==nil then V8._agFruit=true end if V8._agDrop==nil then V8._agDrop=true end if V8._agChest==nil then V8._agChest=true end if V8._agBerry==nil then V8._agBerry=true end if V8._agFlower==nil then V8._agFlower=true end if V8._agGear==nil then V8._agGear=true end if V8._agChalice==nil then V8._agChalice=true end startLoop("autoget",autogetLoop) end end})
+AGTab:CreateToggle({Name="Fruit",Callback=function(v) V8._agFruit=v end})
+AGTab:CreateToggle({Name="Boss drop",Callback=function(v) V8._agDrop=v end})
+AGTab:CreateToggle({Name="Chest",Callback=function(v) V8._agChest=v end})
+AGTab:CreateToggle({Name="Berry",Callback=function(v) V8._agBerry=v end})
+AGTab:CreateToggle({Name="Flower",Callback=function(v) V8._agFlower=v end})
+AGTab:CreateToggle({Name="Gear",Callback=function(v) V8._agGear=v end})
+AGTab:CreateToggle({Name="Chalice",Callback=function(v) V8._agChalice=v end})
+local SwordTab=Window:CreateTab("Sword Auto",4483362458)
+SwordTab:CreateToggle({Name="Buy all",Callback=function(v) Sword.buyAll=v if v then startLoop("swordbuy",swordBuyLoop) end end})
+SwordTab:CreateToggle({Name="Saber quest v3",Callback=function(v) Sword.saber=v if v then startLoop("saber",saberQuestLoopV3) end end})
+SwordTab:CreateToggle({Name="Pole quest v3 (invite)",Callback=function(v) Sword.pole=v if v then startLoop("pole",poleQuestLoopV3) end end})
+SwordTab:CreateToggle({Name="Trident quest v3",Callback=function(v) Sword.trident=v if v then startLoop("trident",tridentQuestLoopV3) end end})
+SwordTab:CreateToggle({Name="Legendary dealer v3",Callback=function(v) Sword.dealer=v if v then startLoop("dealer",dealerLoopV3) end end})
+local LegTab=Window:CreateTab("Legendary Sword",4483362458)
+LegTab:CreateToggle({Name="Elite farm (Yama)",Callback=function(v) Leg.yamaFarm=v if v then startLoop("elite",eliteFarmLoop) end end})
+LegTab:CreateToggle({Name="Pull Yama",Callback=function(v) Leg.yamaPull=v if v then startLoop("yamapull",yamaPullLoop) end end})
+LegTab:CreateToggle({Name="5 Torch Tushita",Callback=function(v) Leg.torch=v if v then startLoop("torch",torchLoop) end end})
+LegTab:CreateToggle({Name="Longma boss",Callback=function(v) Leg.longma=v if v then startLoop("longma",longmaLoop) end end})
+LegTab:CreateToggle({Name="CDK assist",Callback=function(v) Leg.cdkAssist=v if v then startLoop("cdkassist",cdkAssistLoop) end end})
+LegTab:CreateButton({Name="Cek mastery",Callback=function() notify("Yama="..(readMastery("Yama") or 0).." Tushita="..(readMastery("Tushita") or 0),6) end})
+local GearTab=Window:CreateTab("Gear Farm",4483362458)
+GearTab:CreateToggle({Name="Gear Farm v2 (multi-boss queue)",Callback=function(v) Sword.gearV2=v if v then startLoop("gear_v2",gearFarmV2Loop) end end})
+for _,g in ipairs({{n="Mirror Fractal",t="DoughKing"},{n="Dark Dagger",t="rip_indra"},{n="TTK",t="TTK"},{n="Sanguine",t="Sanguine"},{n="Serpent Bow",t="Serpent"},{n="Twin Hooks",t="Twin"},{n="Dragon Trident",t="Dragon"},{n="Dark Blade",t="DarkBlade"},{n="Tushita",t="Tushita"},{n="Yama",t="Yama"}}) do local c=g GearTab:CreateButton({Name="Farm "..g.n,Callback=function() local npc=findNPC(c.t) if npc then tpTo(npc) task.wait(0.6) firePPsNear(25) notify(c.n.." trig") else notify(c.n.." kosong") end end}) end
+local UtilTab=Window:CreateTab("Utility",4483362458)
+UtilTab:CreateToggle({Name="Auto Stats",Callback=function(v) S.autoStats=v if v then startLoop("stats",autoStatsLoop) end end})
+UtilTab:CreateInput({Name="Stat target",CurrentValue="Melee",Callback=function(v) S.statTarget=v end})
+UtilTab:CreateToggle({Name="Anti-AFK",Callback=function(v) S.antiAfk=v if v then startLoop("afk",antiAfkLoop) end end})
+UtilTab:CreateButton({Name="FPS Boost",Callback=applyFPSBoost})
+UtilTab:CreateButton({Name="Server Hop",Callback=safeHop})
+UtilTab:CreateButton({Name="Hop Populated",Callback=hopToPopulatedServer})
+UtilTab:CreateButton({Name="Save",Callback=function() pcall(function() Rayfield:SaveConfiguration() end) end})
+UtilTab:CreateButton({Name="Load",Callback=function() pcall(function() Rayfield:LoadConfiguration() end) end})
+UtilTab:CreateButton({Name="Destroy UI",Callback=function() pcall(function() Rayfield:Destroy() end) end})
+local PvpTab=Window:CreateTab("PvP",4483362458)
+PvpTab:CreateToggle({Name="Silent Aim",Callback=function(v) S.silentAim=v end})
+PvpTab:CreateToggle({Name="Skill Aimbot",Callback=function(v) S.skillAimbot=v end})
+PvpTab:CreateSlider({Name="Prediction",Range={0.05,0.5},Increment=0.05,CurrentValue=0.15,Callback=function(v) S.aimPrediction=v end})
+PvpTab:CreateToggle({Name="Auto Combo",Callback=function(v) S.autoCombo=v if v then startLoop("combo",autoComboLoop) end end})
+PvpTab:CreateSlider({Name="Combo delay",Range={0.05,0.5},Increment=0.05,CurrentValue=0.15,Callback=function(v) S.comboDelay=v end})
+PvpTab:CreateInput({Name="Combo keys",CurrentValue="Z,X,C,V",Callback=function(v) local t={} for k in v:gmatch("[^,]+") do table.insert(t,k:gsub("%s","")) end S.comboSkills=t end})
+PvpTab:CreateToggle({Name="Bounty Hunter",Callback=function(v) S.bountyHunter=v if v then startLoop("bounty",bountyHunterLoop) end end})
+PvpTab:CreateToggle({Name="Auto Retaliate",Callback=function(v) S.autoRetaliate=v end})
+PvpTab:CreateToggle({Name="Invisible",Callback=function(v) S.invisible=v end})
+PvpTab:CreateToggle({Name="Anti-Aim",Callback=function(v) S.antiAim=v end})
+local DragonTab=Window:CreateTab("Dragon Content",4483362458)
+DragonTab:CreateToggle({Name="Draco V1",Callback=function(v) V7.dracoV1=v if v then startLoop("draco1",makeDracoLoop(1)) end end})
+DragonTab:CreateToggle({Name="Draco V2",Callback=function(v) V7.dracoV2=v if v then startLoop("draco2",makeDracoLoop(2)) end end})
+DragonTab:CreateToggle({Name="Draco V3",Callback=function(v) V7.dracoV3=v if v then startLoop("draco3",makeDracoLoop(3)) end end})
+DragonTab:CreateToggle({Name="Draco V4 (solo)",Callback=function(v) S.autoDracoV4=v if v then startLoop("draco_v4",dracoSoloV16) end end})
+DragonTab:CreateToggle({Name="Relic Trial",Callback=function(v) V7.relicTrial=v if v then startLoop("relic",relicTrialLoop) end end})
+DragonTab:CreateToggle({Name="Training V4",Callback=function(v) V7.trainingV4=v if v then startLoop("train4",trainingV4Loop) end end})
+DragonTab:CreateToggle({Name="Prehistoric",Callback=function(v) V7.prehistoric=v if v then startLoop("prehi",prehistoricLoop) end end})
+DragonTab:CreateToggle({Name="Volcano v3",Callback=function(v) V7.volcano=v if v then startLoop("volcano",volcanoLoopV3) end end})
+DragonTab:CreateToggle({Name="Dino Bones",Callback=function(v) V7.dinoBones=v if v then startLoop("bones",dinoBonesLoop) end end})
+DragonTab:CreateToggle({Name="Dragon Eggs",Callback=function(v) V7.dragonEggs=v if v then startLoop("eggs",dragonEggsLoop) end end})
+local SeaTab=Window:CreateTab("Sea & Boat",4483362458)
+SeaTab:CreateToggle({Name="Auto Fish",Callback=function(v) V7.autoFish=v if v then startLoop("fish",autoFishLoop) end end})
+SeaTab:CreateToggle({Name="Sell Fish",Callback=function(v) V7.autoSellFish=v if v then startLoop("sellfish",autoSellFishLoop) end end})
+SeaTab:CreateToggle({Name="Sea Event",Callback=function(v) V7.seaEvent=v if v then startLoop("seaevent",seaEventLoop) end end})
+SeaTab:CreateToggle({Name="Sail",Callback=function(v) V7.autoSail=v if v then startLoop("sail",autoSailLoop) end end})
+SeaTab:CreateToggle({Name="Ship Noclip",Callback=function(v) V7.shipNoclip=v if v then startLoop("shipnc",shipNoclipLoop) end end})
+SeaTab:CreateToggle({Name="Ship Speed",Callback=function(v) V7.shipSpeed=v end})
+local FactTab=Window:CreateTab("Factory & Dungeon",4483362458)
+FactTab:CreateToggle({Name="Factory",Callback=function(v) V7.autoFactory=v if v then startLoop("factory",autoFactoryLoop) end end})
+FactTab:CreateToggle({Name="Factory Raid",Callback=function(v) V7.factoryRaid=v if v then startLoop("fraud",factoryRaidLoop) end end})
+FactTab:CreateToggle({Name="Dungeon",Callback=function(v) V7.autoDungeon=v if v then startLoop("dungeon",autoDungeonLoop) end end})
+local ProgTab=Window:CreateTab("Progression+",4483362458)
+ProgTab:CreateToggle({Name="Skull Guitar",Callback=function(v) V7.skullGuitar=v if v then startLoop("skull",skullGuitarLoop) end end})
+ProgTab:CreateToggle({Name="Obs V2",Callback=function(v) V7.obsV2=v if v then startLoop("obsv2",obsV2Loop) end end})
+ProgTab:CreateToggle({Name="Rainbow Haki",Callback=function(v) V7.rainbowHaki=v if v then startLoop("rhaki",rainbowHakiLoop) end end})
+ProgTab:CreateToggle({Name="Buy Random Fruit",Callback=function(v) V7.autoBuyFruit=v if v then startLoop("buyfr",buyFruitLoop) end end})
+ProgTab:CreateToggle({Name="Buy Cheapest Fruit",Callback=function(v) V7.cheapestFruit=v if v then startLoop("cheapfr",cheapestFruitLoop) end end})
+ProgTab:CreateToggle({Name="Buy Gun",Callback=function(v) V7.autoGun=v if v then startLoop("gun",autoGunLoop) end end})
+ProgTab:CreateToggle({Name="Buy Accessory",Callback=function(v) V7.autoAccessory=v if v then startLoop("acc",autoAccessoryLoop) end end})
+ProgTab:CreateToggle({Name="Buy Material",Callback=function(v) V7.autoMaterial=v if v then startLoop("mat",autoMaterialLoop) end end})
+ProgTab:CreateToggle({Name="Race Reroll",Callback=function(v) V7.autoReroll=v if v then startLoop("reroll",autoRerollLoop) end end})
+local PvpXTab=Window:CreateTab("PvP Extended",4483362458)
+PvpXTab:CreateToggle({Name="Smart Weapon",Callback=function(v) V7.smartWeapon=v if v then startLoop("smartw",smartWeaponLoop) end end})
+PvpXTab:CreateToggle({Name="Anti-Ban",Callback=function(v) V7.antiBan=v antiBanToggle(v) end})
+PvpXTab:CreateButton({Name="Panic Sky",Callback=panicSky})
+PvpXTab:CreateInput({Name="Panic key",CurrentValue="P",Callback=function(v) if #v==1 then V7.panicKey=v:upper() end end})
+local VisXTab=Window:CreateTab("Visual Extended",4483362458)
+VisXTab:CreateButton({Name="Full Bright",Callback=applyFullBright})
+VisXTab:CreateButton({Name="No Fog",Callback=applyNoFog})
+VisXTab:CreateToggle({Name="FOV Changer",Callback=function(v) setFOVEnabled(v) end})
+VisXTab:CreateSlider({Name="FOV Value",Range={40,120},Increment=5,CurrentValue=70,Callback=function(v) V7.fovValue=v end})
+VisXTab:CreateToggle({Name="Dashboard",Callback=function(v) V7.showDashboard=v end})
+local TpXTab=Window:CreateTab("TP Extended",4483362458)
+TpXTab:CreateInput({Name="Player name",Callback=function(v) V7._tpName=v end})
+TpXTab:CreateButton({Name="TP to Player",Callback=function() if V7._tpName~="" then if not tpToPlayerName(V7._tpName) then notify("no player") end else notify("isi nama") end end})
+local AutoTab=Window:CreateTab("Auto (1 Toggle)",4483362458)
+AutoTab:CreateToggle({Name="Auto Race V2 full",Callback=function(v) S.autoRaceV2=v if v then startLoop("auto_rv2",autoRaceV2Loop) end end})
+AutoTab:CreateSection("Race V3 — per race")
+for _,race in ipairs({"Human","Rabbit","Shark","Angel","Ghoul","Cyborg"}) do local captured=race AutoTab:CreateToggle({Name="Race V3 — "..captured,Callback=function(v) S.autoRaceV3=v if v then S.raceV3Target=captured startLoop("v3_"..captured,makeRaceV3Boost(captured)) end end}) end
+AutoTab:CreateSection("Race V4 — per race")
+for _,race in ipairs({"Human","Rabbit","Shark","Angel","Ghoul","Cyborg"}) do local captured=race AutoTab:CreateToggle({Name="Race V4 — "..captured.." ("..(V4_TITLES[captured] or "?")..")",Callback=function(v) S.autoRaceV4=v if v then S.raceV3Target=captured startLoop("v4_"..captured,makeRaceV4Boost(captured)) end end}) end
+AutoTab:CreateToggle({Name="Draco V4 — SOLO",Callback=function(v) S.autoDracoV4=v if v then startLoop("draco_v4",dracoSoloV16) end end})
+AutoTab:CreateSection("Sword")
+AutoTab:CreateToggle({Name="Auto Holy Torch",Callback=function(v) V8.autoHolyTorch=v if v then startLoop("auto_torch",autoHolyTorchLoop) end end})
+AutoTab:CreateToggle({Name="Auto Tushita V2",Callback=function(v) V8.autoTushita=v if v then startLoop("auto_tushita",autoTushitaV2Loop) end end})
+AutoTab:CreateToggle({Name="Auto Yama V2",Callback=function(v) V8.autoYama=v if v then startLoop("auto_yama",autoYamaV2Loop) end end})
+AutoTab:CreateToggle({Name="Auto CDK V2",Callback=function(v) V8.autoCDK=v if v then startLoop("auto_cdk",autoCDKV2Loop) end end})
+AutoTab:CreateToggle({Name="Auto Haze Misery",Callback=function(v) V8.autoHaze=v if v then startLoop("auto_haze",autoHazeV2Loop) end end})
+AutoTab:CreateSection("Boss & Fruit")
+AutoTab:CreateToggle({Name="Auto Boss Drop",Callback=function(v) V8.autoBossDrop=v if v then startLoop("auto_boss",autoBossDropV2Loop) end end})
+AutoTab:CreateToggle({Name="Auto Fruit Sniper",Callback=function(v) V8.autoFruitSniper=v if v then startLoop("auto_fruit",autoFruitSniperLoop) end end})
+AutoTab:CreateSection("Fighting Style")
+AutoTab:CreateToggle({Name="Auto FS Cascade v3",Callback=function(v) V8.autoFSCascade=v if v then startLoop("auto_fs",autoFSCascadeLoopV3) end end})
+AutoTab:CreateSection("Utility")
+AutoTab:CreateToggle({Name="Auto Low-Player Hop",Callback=function(v) V8.autoLowHop=v if v then startLoop("auto_hop",autoLowHopLoop) end end})
+AutoTab:CreateButton({Name="Hop now",Callback=safeHop})
+AutoTab:CreateButton({Name="Show progress",Callback=function() notify("Progress:"..progressStr(),10) end})
+local RecTab=Window:CreateTab("Route Record",4483362458)
+safePara(RecTab,"Rekam sekali","Isi nama route (rabbit_v3 / race_v4_Angel), tekan Record, main manual sampai selesai, Stop.")
+RecTab:CreateInput({Name="Route name",PlaceholderText="rabbit_v3",Callback=function(v) V9._recordName=v end})
+RecTab:CreateButton({Name="START Record",Callback=function() if V9._recordName=="" then notify("isi nama") return end startRecord(V9._recordName) end})
+RecTab:CreateButton({Name="STOP Record",Callback=stopRecord})
+RecTab:CreateButton({Name="PLAYBACK",Callback=function() if V9._recordName=="" then notify("isi nama") return end task.spawn(function() playRoute(V9._recordName) end) end})
+RecTab:CreateButton({Name="STOP Playback",Callback=function() V9._playing=false end})
+RecTab:CreateButton({Name="List routes",Callback=function() local p={} for n,f in pairs(V9._routes) do table.insert(p,n.."("..#f..")") end if #p==0 then notify("kosong") else notify(table.concat(p,"|"),8) end end})
+local MastTab=Window:CreateTab("★ MASTER AUTO",4483362458)
+safePara(MastTab,"1 Toggle = SEMUA","Urut: Torch → Tushita → Yama → CDK → V2 → V3 → V4 → FS. Auto-skip kalau sudah punya.")
+MastTab:CreateToggle({Name="★★★ MASTER AUTO",Callback=function(v) V10.masterAuto=v if v then notify("MASTER START",4) startLoop("master",masterLoop) else masterStop() end end})
+MastTab:CreateToggle({Name="Boss Farm (background)",Callback=function(v) V10.masterBossFarm=v if v then V8.autoBossDrop=true if not _runningLoops["auto_boss"] then startLoop("auto_boss",autoBossDropV2Loop) end else V8.autoBossDrop=false end end})
+MastTab:CreateToggle({Name="Fruit Sniper (background)",Callback=function(v) V10.masterFruitFarm=v if v then V8.autoFruitSniper=true if not _runningLoops["auto_fruit"] then startLoop("auto_fruit",autoFruitSniperLoop) end else V8.autoFruitSniper=false end end})
+MastTab:CreateButton({Name="Cek Progress",Callback=function() notify("Progress:"..progressStr().." Status:"..V10._status,10) end})
+MastTab:CreateButton({Name="Check V4 titles",Callback=function() local out={} for r,t in pairs(V4_TITLES) do if hasV4Title(r) then table.insert(out,r.."=✓"..t) end end if #out==0 then notify("Belum ada V4 title") else notify(table.concat(out," | "),10) end end})
+MastTab:CreateButton({Name="Check prerequisites",Callback=function() notify("Blue="..tostring(hasBlueGear()).." Mirror="..tostring(hasMirrorFractal()).." Moon="..tostring(Moon.full),10) end})
+MastTab:CreateButton({Name="STOP semua",Callback=masterStop})
+MastTab:CreateButton({Name="Reset cycle",Callback=function() V10._cycle=0 V10._retryCount=0 end})
+MastTab:CreateSlider({Name="Max Cycle",Range={5,50},Increment=5,CurrentValue=30,Callback=function(v) V10._maxCycle=v end})
+local BoostTab=Window:CreateTab("⚡ v16.3 BOOST",4483362458)
+safePara(BoostTab,"v16.3 — upgraded loops","FS cascade prereq grind, Pole invite, Volcano poll, Saber/Trident/Dealer v2, Gear multi-boss.")
+BoostTab:CreateToggle({Name="Gear Farm v2 (multi-boss queue)",Callback=function(v) Sword.gearV2=v if v then startLoop("gear_v2",gearFarmV2Loop) end end})
+BoostTab:CreateButton({Name="Check mastery FS prerequisites",Callback=function() local list={"Dark Step","Electric Claw","Water Kung Fu","Black Leg","Dragon Breath"} local out={} for _,s in ipairs(list) do table.insert(out,s.."="..mastery(s)) end notify(table.concat(out," | "),10) end})
 
-    waypoints = chain
-    useGenerated = true
-    rebuild()
-    return true, ("%d nodes chained"):format(#chain)
-end
-
--- ─── Rayfield UI ───────────────────────────────────────────────
-local Window = Rayfield:CreateWindow({
-    Name = "Backseat Rally — Auto Racing Line",
-    LoadingTitle = "Loading",
-    LoadingSubtitle = "scan · generate · drive",
-    ConfigurationSaving = { Enabled = false },
-    KeySystem = false,
-})
-
-local tabStage = Window:CreateTab("Stage", 4483362458)
-tabStage:CreateSection("Preset")
-local stageNames: {string} = {}
-for k in pairs(PRESETS) do table.insert(stageNames, k) end
-table.sort(stageNames)
-
-for _, name in ipairs(stageNames) do
-    tabStage:CreateButton({
-        Name = name,
-        Callback = function()
-            local p = PRESETS[name]
-            if not p then return end
-            currentStage = name
-            amp = p.amp
-            lookahead = p.look
-            curveThresh = math.rad(p.thr)
-            wetFactor = p.wet
-            Rayfield:Notify({ Title = "Stage", Content = name, Duration = 2 })
-            if autopilot then
-                Rayfield:Notify({ Title = "Note", Content = "preset changed — disable autopilot to apply cleanly", Duration = 3 })
-            elseif #waypoints >= 4 and useGenerated then
-                rebuild()
-            end
-        end,
-    })
-end
-
-local tabScan = Window:CreateTab("Scan & Generate", 4483362458)
-tabScan:CreateSection("Auto-detect track")
-
-tabScan:CreateButton({
-    Name = "SCAN NOW — find path nodes and generate",
-    Callback = function()
-        local ok, msg = performScan()
-        Rayfield:Notify({
-            Title = ok and "Ready" or "Scan failed",
-            Content = msg,
-            Duration = 4,
-        })
-    end,
-})
-
-tabScan:CreateToggle({
-    Name = "Reverse direction (fallback only)",
-    CurrentValue = false,
-    Callback = function(v)
-        reverseDirection = v
-        if #waypoints >= 4 then
-            local veh = getVehicle()
-            local nodes = scanTrackNodes()
-            local chain = buildChain(nodes, veh and veh.position or nil)
-            if #chain >= 4 then
-                waypoints = chain
-                rebuild()
-            end
-        end
-    end,
-})
-
-tabScan:CreateSection("Manual (fallback)")
-
-tabScan:CreateButton({
-    Name = "Add waypoint at current position",
-    Callback = function()
-        if #waypoints >= MAX_WAYPOINTS then
-            Rayfield:Notify({ Title = "Cap", Content = ("max %d waypoints"):format(MAX_WAYPOINTS), Duration = 2 })
-            return
-        end
-        local v = getVehicle()
-        if not v then return end
-        table.insert(waypoints, v.position)
-        useGenerated = false
-        if #waypoints >= 4 then rebuild() end
-    end,
-})
-
-tabScan:CreateButton({
-    Name = "Undo last waypoint",
-    Callback = function()
-        if #waypoints > 0 then
-            table.remove(waypoints)
-            rebuild()
-        end
-    end,
-})
-
-tabScan:CreateButton({
-    Name = "Clear all",
-    Callback = function()
-        waypoints = {}
-        rebuild()
-    end,
-})
-
-tabScan:CreateSection("Cache")
-
-tabScan:CreateButton({
-    Name = "Save scan to file",
-    Callback = function()
-        if not writefile then
-            Rayfield:Notify({ Title = "No writefile", Content = "executor lacks writefile", Duration = 3 })
-            return
-        end
-        local out: {{number}} = {}
-        for _, w in ipairs(waypoints) do
-            table.insert(out, { w.X, w.Y, w.Z })
-        end
-        local fname = "rally_" .. currentStage:gsub("%s+", "_") .. ".json"
-        writefile(fname, HttpService:JSONEncode(out))
-        Rayfield:Notify({ Title = "Saved", Content = fname, Duration = 2 })
-    end,
-})
-
-tabScan:CreateButton({
-    Name = "Load scan from file",
-    Callback = function()
-        if not isfile or not readfile then
-            Rayfield:Notify({ Title = "No readfile", Content = "executor lacks readfile", Duration = 3 })
-            return
-        end
-        local fname = "rally_" .. currentStage:gsub("%s+", "_") .. ".json"
-        if not isfile(fname) then
-            Rayfield:Notify({ Title = "Empty", Content = fname, Duration = 3 })
-            return
-        end
-        local ok, data = pcall(function()
-            return HttpService:JSONDecode(readfile(fname))
-        end)
-        if not ok or type(data) ~= "table" then
-            Rayfield:Notify({ Title = "Corrupt", Content = "file parse failed", Duration = 3 })
-            return
-        end
-        local loaded: {Vec3} = {}
-        for _, t in ipairs(data) do
-            if type(t) == "table"
-                and type(t[1]) == "number"
-                and type(t[2]) == "number"
-                and type(t[3]) == "number" then
-                table.insert(loaded, Vector3.new(t[1], t[2], t[3]))
-            end
-        end
-        waypoints = loaded
-        useGenerated = true
-        rebuild()
-        Rayfield:Notify({ Title = "Loaded", Content = ("%d points"):format(#loaded), Duration = 2 })
-    end,
-})
-
-local tabLine = Window:CreateTab("Racing Line", 4483362458)
-tabLine:CreateToggle({
-    Name = "Generate (RRR3 style)",
-    CurrentValue = true,
-    Callback = function(v)
-        useGenerated = v
-        if #waypoints >= 4 then rebuild() end
-    end,
-})
-tabLine:CreateSlider({
-    Name = "Amplitude",
-    Range = { 2, 24 },
-    Increment = 2,
-    Suffix = " stud",
-    CurrentValue = amp,
-    Callback = function(v)
-        amp = v
-        if useGenerated and #waypoints >= 4 then rebuild() end
-    end,
-})
-tabLine:CreateButton({
-    Name = "Regenerate",
-    Callback = function()
-        if #waypoints >= 4 then rebuild() end
-    end,
-})
-
-local tabAuto = Window:CreateTab("Autopilot", 4483362458)
-tabAuto:CreateToggle({
-    Name = "Autopilot",
-    CurrentValue = false,
-    Callback = function(v)
-        if v and #spline < 2 then
-            Rayfield:Notify({ Title = "Empty spline", Content = "SCAN first", Duration = 3 })
-            return
-        end
-        autopilot = v
-        if not v then
-            local veh = getVehicle()
-            if veh and veh.seat.Parent then
-                veh.seat.Steer = 0
-                veh.seat.Throttle = 0
-            end
-        end
-    end,
-})
-tabAuto:CreateSlider({
-    Name = "Lookahead",
-    Range = { 4, 30 },
-    Increment = 1,
-    Suffix = " stud",
-    CurrentValue = lookahead,
-    Callback = function(v) lookahead = v end,
-})
-
--- ─── main render loop ─────────────────────────────────────────
-local function onRenderStep()
-    if not autopilot then return end
-    if #spline < 2 then return end
-    local v = getVehicle()
-    if not v then return end
-
-    local idx = nearestIdx(v.position)
-    local target, ti = lookaheadPoint(idx, lookahead)
-    if not target then return end
-
-    local sp = 1
-    local hi = math.min(ti + 6, #spline)
-    for j = idx, hi do
-        if spline[j].speed < sp then sp = spline[j].speed end
-    end
-    drive(v, target, math.clamp(sp, -1, 1))
-end
-
-table.insert(connections, RunService.RenderStepped:Connect(onRenderStep))
-
--- ─── cleanup ──────────────────────────────────────────────────
-local function cleanup()
-    for _, c in ipairs(connections) do
-        c:Disconnect()
-    end
-    connections = {}
-    clearDrawings()
-    spline = {}
-    autopilot = false
-    local veh = getVehicle()
-    if veh and veh.seat.Parent then
-        veh.seat.Steer = 0
-        veh.seat.Throttle = 0
-    end
-end
-
-getgenv().BackseatRallyCleanup = cleanup
+notify("JF v16.3 FINAL — all boosts integrated. 27 tabs ready.",8)
