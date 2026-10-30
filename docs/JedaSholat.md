@@ -29,7 +29,7 @@ adb install -r testtarget/build/outputs/apk/debug/testtarget-debug.apk
 ./gradlew :app:connectedDebugAndroidTest
 ```
 
-`testtarget` adalah aplikasi launcher biasa khusus pengujian overlay; bukan bagian dari APK JedaSholat. Workflow CI menjalankan smoke test ini pada emulator Android 15. Uji OEM, Doze, reboot fisik, dan pencabutan izin tetap perlu dilakukan pada perangkat nyata.
+`testtarget` adalah aplikasi launcher biasa khusus pengujian overlay; bukan bagian dari APK JedaSholat. Workflow CI menyediakan smoke test ini pada emulator Android 15 sebagai pemeriksaan advisory; binding Layanan Aksesibilitas di emulator CI belum cukup stabil untuk dijadikan gate rilis. Uji OEM, Doze, reboot fisik, dan pencabutan izin tetap perlu dilakukan pada perangkat nyata.
 
 Pratinjau web:
 

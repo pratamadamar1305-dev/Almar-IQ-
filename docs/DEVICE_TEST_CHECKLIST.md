@@ -6,7 +6,7 @@ Gunakan APK debug dari artefak CI `JedaSholat-debug` atau build lokal. Catat mer
 
 | Perangkat | Android | Fokus | Status |
 |---|---:|---|---|
-| Emulator CI Pixel 6, Android 15 | 35 | overlay selected/unselected, strict auto-unlock, snooze persisten | otomatis di workflow |
+| Emulator CI Pixel 6, Android 15 | 35 | overlay selected/unselected, strict auto-unlock, snooze persisten | advisory; binding izin CI belum stabil |
 | Samsung Galaxy (One UI) | 13/14/15 | battery manager, restricted settings, exact alarm | perlu perangkat |
 | Xiaomi/POCO (HyperOS/MIUI) | 13/14/15 | autostart, battery saver, overlay/accessibility survival | perlu perangkat |
 | OPPO/realme/vivo | 13/14/15 | OEM background limits, permission revocation | perlu perangkat |
