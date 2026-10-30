@@ -26,11 +26,21 @@ jobs:
       - name: Unit tests
         id: tests
         continue-on-error: true
-        run: ./gradlew :core:test :app:testDebugUnitTest --no-daemon
+        run: |
+          set -o pipefail
+          ./gradlew :core:test :app:testDebugUnitTest --no-daemon --console=plain 2>&1 | tee test-build.log
       - name: Lint and debug APK
         id: build
         continue-on-error: true
-        run: ./gradlew :app:lintDebug :app:assembleDebug --no-daemon
+        run: |
+          set -o pipefail
+          ./gradlew :app:lintDebug :app:assembleDebug --no-daemon --console=plain 2>&1 | tee app-build.log
+      - name: Surface compiler diagnostics
+        if: always()
+        run: |
+          mkdir -p app/build/reports core/build/reports
+          cp -f test-build.log app-build.log app/build/reports/ || true
+          grep -hE '^e:|error:|FAILED|What went wrong|Execution failed' test-build.log app-build.log 2>/dev/null | while IFS= read -r line; then echo "::error::$line"; done || true
       - uses: actions/upload-artifact@v5
         with:
           name: JedaSholat-debug
