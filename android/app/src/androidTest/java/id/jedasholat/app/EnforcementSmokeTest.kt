@@ -42,7 +42,13 @@ class EnforcementSmokeTest {
         device.pressHome()
         runCatching { shell("appops set id.jedasholat.app ACCESS_RESTRICTED_SETTINGS allow") }
         shell("settings put secure enabled_accessibility_services $service")
+        shell("settings put secure accessibility_enabled 0")
         shell("settings put secure accessibility_enabled 1")
+        val settingsIntent = android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(settingsIntent)
+        device.waitForIdle(2000)
+        device.pressBack()
+        device.waitForIdle(1000)
         val enabled = android.provider.Settings.Secure.getString(context.contentResolver, android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: ""
         assertTrue("Service not enabled: $enabled", enabled.contains(service))
         val dump = shell("dumpsys accessibility")
