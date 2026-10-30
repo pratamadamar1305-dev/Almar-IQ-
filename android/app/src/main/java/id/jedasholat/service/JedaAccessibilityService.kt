@@ -74,6 +74,7 @@ class JedaAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event?.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val pkg = event.packageName?.toString() ?: return
+        android.util.Log.d("JedaService", "event pkg=$pkg")
         foreground = pkg
         evaluate()
     }
@@ -105,6 +106,7 @@ class JedaAccessibilityService : AccessibilityService() {
         val inCall = audio.mode == AudioManager.MODE_IN_CALL || audio.mode == AudioManager.MODE_IN_COMMUNICATION
         val decision = if (locked || inCall || !settings.accessibilityConsent) Decision.Allow else PolicyEngine.decide(
             foreground, packageName, safety, settings, sessions, now, dismissed)
+        android.util.Log.d("JedaService", "evaluate foreground=$foreground decision=$decision sessions=${sessions.size} enabled=${settings.protectionEnabled} consent=${settings.accessibilityConsent} selected=${settings.selectedPackages}")
         when (decision) {
             Decision.Allow -> hide()
             is Decision.Remind -> show(decision.session, false)
@@ -168,9 +170,10 @@ class JedaAccessibilityService : AccessibilityService() {
                 PixelFormat.OPAQUE).apply { gravity = Gravity.CENTER }
             runCatching {
                 getSystemService(WindowManager::class.java).addView(root, params)
+                android.util.Log.d("JedaService", "overlay added for $foreground session=${session.id}")
                 overlay = root
                 handler.removeCallbacks(ticker); handler.post(ticker)
-            }.onFailure { hide() }
+            }.onFailure { android.util.Log.e("JedaService", "overlay add failed", it); hide() }
         }
         val remaining = max(0L, session.end - System.currentTimeMillis())
         val seconds = (remaining + 999L) / 1000L

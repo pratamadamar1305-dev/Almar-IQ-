@@ -160,7 +160,7 @@ jobs:
           p = Path('logcat.txt')
           if p.exists():
               for line in p.read_text(errors='replace').splitlines():
-                  if 'jedasholat' in line or 'FATAL' in line or 'AndroidRuntime' in line:
+                  if 'jedasholat' in line or 'JedaService' in line or 'FATAL' in line or 'AndroidRuntime' in line:
                       print('::error::LOGCAT ' + line.replace('%', '%25').replace('\n', '%0A'))
           PY
       - name: Upload instrumented reports
