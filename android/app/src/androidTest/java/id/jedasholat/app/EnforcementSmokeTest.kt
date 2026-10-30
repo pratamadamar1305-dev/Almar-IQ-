@@ -37,6 +37,8 @@ class EnforcementSmokeTest {
         runCatching { shell("appops set id.jedasholat.app ACCESS_RESTRICTED_SETTINGS allow") }
         shell("settings put secure enabled_accessibility_services $service")
         shell("settings put secure accessibility_enabled 1")
+        val enabled = android.provider.Settings.Secure.getString(context.contentResolver, android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: ""
+        assertTrue("Service not enabled: $enabled", enabled.contains(service))
         runBlocking {
             container.database.sessions().clear()
             container.settings.update {
