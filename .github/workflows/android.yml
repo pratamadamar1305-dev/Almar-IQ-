@@ -144,7 +144,10 @@ jobs:
           for name in ('install-testtarget.log', 'connected-test.log'):
               p = Path(name)
               if p.exists():
-                  for line in p.read_text(errors='replace').splitlines():
+                  lines = p.read_text(errors='replace').splitlines()
+                  for line in lines[-120:]:
+                      print('::error::TAIL ' + name + ' ' + line.replace('%', '%25').replace('\n', '%0A'))
+                  for line in lines:
                       if any(t in line for t in ('e: file:', 'error:', 'FAILED', 'Exception', 'What went wrong', 'Execution failed', 'INSTALL_', 'Failure')):
                           print('::error::' + line.replace('%', '%25').replace('\n', '%0A'))
           for p in Path('app/build/outputs/androidTest-results').glob('**/TEST-*.xml'):
