@@ -46,8 +46,16 @@ jobs:
               p = Path(name)
               if p.exists():
                   for line in p.read_text(errors='replace').splitlines():
-                      if any(token in line for token in ('e: file:', 'error:', 'FAILED', 'What went wrong', 'Execution failed')):
+                      if any(token in line for token in ('e: file:', 'error:', 'FAILED', 'What went wrong', 'Execution failed', 'Error:', 'expected:', 'but was:')):
                           print('::error::' + line.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A'))
+          import xml.etree.ElementTree as ET
+          for p in Path('.').glob('*/build/test-results/*/TEST-*.xml'):
+              for case in ET.parse(p).getroot().iter('testcase'):
+                  for fail in case.iter('failure'):
+                      print('::error::' + (case.get('name','') + ' ' + fail.get('message','')).replace('%','%25').replace('\n','%0A'))
+          for p in Path('.').glob('app/build/reports/lint-results-debug.txt'):
+              for line in p.read_text(errors='replace').splitlines():
+                  if 'Error:' in line: print('::error::' + line.replace('%','%25'))
           PY
       - uses: actions/upload-artifact@v5
         if: steps.build.outcome == 'success'

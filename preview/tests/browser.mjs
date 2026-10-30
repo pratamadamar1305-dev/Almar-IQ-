@@ -2,6 +2,7 @@ import { chromium } from '@playwright/test';
 import assert from 'node:assert/strict';
 const browser = await chromium.launch({headless:true});
 const page = await browser.newPage({viewport:{width:1440,height:1050}});
+page.setDefaultTimeout(10000);
 const errors=[]; page.on('pageerror',e=>errors.push(e.message));
 await page.goto('http://localhost:3001',{waitUntil:'networkidle'});
 assert.match(await page.title(),/JedaSholat/);
@@ -32,3 +33,4 @@ await page.screenshot({path:'/home/user/jeda-mobile.png',fullPage:true});
 assert.deepEqual(errors,[]);
 console.log('Browser checks passed: navigation, rules, search, simulation, snooze, strict mode, mobile overflow, no runtime errors.');
 await browser.close();
+
