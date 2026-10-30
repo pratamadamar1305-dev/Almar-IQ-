@@ -185,6 +185,6 @@ class JedaAccessibilityService : AccessibilityService() {
     private fun hide() {
         handler.removeCallbacks(ticker)
         overlay?.let { runCatching { getSystemService(WindowManager::class.java).removeViewImmediate(it) } }
-        overlay = null; timerText = null; titleText = null; shownKey = ""; lastAnnouncedMinute = -1L
+        overlay = null; timerText = null; titleText = null; shownKey = ""; lastAnnouncedMinute = -1
     }
 }

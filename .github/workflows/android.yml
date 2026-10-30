@@ -118,7 +118,39 @@ jobs:
           disable-animations: true
           emulator-boot-timeout: 600
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
-          script: bash -c 'set -o pipefail; cd android; adb wait-for-device; adb install -r testtarget/build/outputs/apk/debug/testtarget-debug.apk 2>&1 | tee install-testtarget.log; ./gradlew :app:connectedDebugAndroidTest --no-daemon --console=plain 2>&1 | tee connected-test.log'
+          script: |
+            bash <<'BASH'
+            set -o pipefail
+            cd android
+            adb wait-for-device
+            if ! adb install -r testtarget/build/outputs/apk/debug/testtarget-debug.apk 2>&1 | tee install-testtarget.log; then
+              adb logcat -d > logcat.txt || true
+              exit 1
+            fi
+            if ! ./gradlew :app:connectedDebugAndroidTest --no-daemon --console=plain 2>&1 | tee connected-test.log; then
+              adb logcat -d > logcat.txt || true
+              exit 1
+            fi
+            BASH
+      - name: Surface emulator diagnostics
+        if: always()
+        continue-on-error: true
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          for name in ('install-testtarget.log', 'connected-test.log'):
+              p = Path(name)
+              if p.exists():
+                  for line in p.read_text(errors='replace').splitlines():
+                      if any(t in line for t in ('e: file:', 'error:', 'FAILED', 'Exception', 'What went wrong', 'Execution failed', 'INSTALL_', 'Failure')):
+                          print('::error::' + line.replace('%', '%25').replace('\n', '%0A'))
+          for p in Path('app/build/outputs/androidTest-results').glob('**/TEST-*.xml'):
+              for case in ET.parse(p).getroot().iter('testcase'):
+                  for fail in list(case.iter('failure')) + list(case.iter('error')):
+                      message = case.get('name', '') + ' ' + fail.get('message', '') + '\n' + (fail.text or '')
+                      print('::error::' + message.replace('%', '%25').replace('\n', '%0A'))
+          PY
       - name: Upload instrumented reports
         if: always()
         uses: actions/upload-artifact@v5
@@ -129,4 +161,5 @@ jobs:
             android/app/build/outputs/androidTest-results/
             android/connected-test.log
             android/install-testtarget.log
+            android/logcat.txt
           if-no-files-found: warn
