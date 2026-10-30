@@ -101,7 +101,7 @@ import id.jedasholat.ui.*
         dismissButton = { TextButton(onClick = { usageDisclosure = false }) { Text("Tidak sekarang") } })
     if (confirm.isNotEmpty()) AlertDialog(onDismissRequest = { confirm = "" }, title = { Text(if (confirm == "stop") "Matikan perlindungan?" else "Hapus data?") },
         text = { Text(if (confirm == "stop") "Jeda yang sedang berjalan akan dihentikan. Jadwal tetap tersimpan dan bisa diaktifkan lagi." else "Tindakan ini tidak bisa dibatalkan. Pengaturan Android seperti izin aksesibilitas tetap harus dicabut secara manual.") },
-        confirmButton = { TextButton(onClick = { when(confirm) { "stop" -> vm.stop() "history" -> vm.deleteHistory() else -> vm.deleteAll() }; confirm = "" }) { Text("Ya, lanjutkan") } },
+        confirmButton = { TextButton(onClick = { when(confirm) { "stop" -> vm.stop(); "history" -> vm.deleteHistory(); else -> vm.deleteAll() }; confirm = "" }) { Text("Ya, lanjutkan") } },
         dismissButton = { TextButton(onClick = { confirm = "" }) { Text("Batal") } })
     if (location) AlertDialog(onDismissRequest = { location = false }, title = { Text("Pilih kota") },
         text = { Column {

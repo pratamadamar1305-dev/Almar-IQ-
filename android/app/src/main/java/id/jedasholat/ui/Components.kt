@@ -68,8 +68,8 @@ fun countdown(end: Long, now: Long): String {
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Ingatkan sebelum: ${rule.reminderMinutes} m", Modifier.weight(1f), fontSize = 13.sp)
-                TextButton(onClick = { onChange(rule.copy(reminderMinutes = (rule.reminderMinutes - 5).coerceAtLeast(0)) }) { Text("−") }
-                TextButton(onClick = { onChange(rule.copy(reminderMinutes = (rule.reminderMinutes + 5).coerceAtMost(30)) }) { Text("+") }
+                TextButton(onClick = { onChange(rule.copy(reminderMinutes = (rule.reminderMinutes - 5).coerceAtLeast(0))) }) { Text("−") }
+                TextButton(onClick = { onChange(rule.copy(reminderMinutes = (rule.reminderMinutes + 5).coerceAtMost(30))) }) { Text("+") }
             }
             Text("Perubahan durasi/mode berlaku pada sesi berikutnya.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }

@@ -20,7 +20,7 @@ import id.jedasholat.ui.*
     LazyColumn(contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             SectionTitle("Atur ritme jedamu", "Durasi bukan lamanya waktu sholat. Jeda selesai otomatis setelah durasi habis.")
-            Row { listOf("Kemarin", "Hari ini", "Besok").forEachIndexed { i, label -> TextButton(onClick = { day = i - 1 }) { Text(label, color = if (day == i - 1) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant) } }
+            Row { listOf("Kemarin", "Hari ini", "Besok").forEachIndexed { i, label -> TextButton(onClick = { day = i - 1 }) { Text(label, color = if (day == i - 1) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant) } } }
             Text("$date · ${state.settings.zoneId}", fontSize = 13.sp)
             Text(WindowFactory.PROFILE, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
