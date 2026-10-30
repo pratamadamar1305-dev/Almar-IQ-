@@ -21,7 +21,9 @@ class AdhanCalculator : PrayerCalculator {
         val times = PrayerTimes(Coordinates(settings.latitude, settings.longitude), components, params)
         val raw = mapOf(Prayer.SUBUH to times.fajr, Prayer.DZUHUR to times.dhuhr,
             Prayer.ASHAR to times.asr, Prayer.MAGHRIB to times.maghrib, Prayer.ISYA to times.isha)
-        val result = raw.mapNotNull { (prayer, value) -> value?.let { prayer to it.time } }.toMap()
+        // Adhan 1.2.1 rounds to the minute but can leak the host clock's milliseconds.
+        // Normalize to whole minutes so results are deterministic across timezones/calls.
+        val result = raw.mapNotNull { (prayer, value) -> value?.let { prayer to Math.floorDiv(it.time, 60_000L) * 60_000L } }.toMap()
         check(result.size == 5) { "Jadwal tidak lengkap di lokasi ini. Gunakan koreksi atau referensi setempat." }
         val zone = ZoneId.of(settings.zoneId)
         check(result.all { (_, instant) -> java.time.Instant.ofEpochMilli(instant).atZone(zone).toLocalDate() == localDate }) {

@@ -14,6 +14,7 @@ class AdhanCalculatorTest {
             val s = Settings(zoneId = zone)
             val times = calculator.calculate("2026-10-30", s)
             assertEquals(5, times.size)
+            times.values.forEach { assertEquals(0L, it % 60_000L) }
             times.values.forEach { assertEquals("2026-10-30", Instant.ofEpochMilli(it).atZone(ZoneId.of(zone)).toLocalDate().toString()) }
             assertEquals(times.values.toList().sorted(), times.values.toList())
         }

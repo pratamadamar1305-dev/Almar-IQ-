@@ -118,20 +118,7 @@ jobs:
           disable-animations: true
           emulator-boot-timeout: 600
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
-          script: |
-            bash <<'BASH'
-            set -o pipefail
-            cd android
-            adb wait-for-device
-            if ! adb install -r testtarget/build/outputs/apk/debug/testtarget-debug.apk 2>&1 | tee install-testtarget.log; then
-              adb logcat -d > logcat.txt || true
-              exit 1
-            fi
-            if ! ./gradlew :app:connectedDebugAndroidTest --no-daemon --console=plain 2>&1 | tee connected-test.log; then
-              adb logcat -d > logcat.txt || true
-              exit 1
-            fi
-            BASH
+          script: bash -c 'set -o pipefail; cd "$GITHUB_WORKSPACE/android"; adb wait-for-device; if ! adb install -r testtarget/build/outputs/apk/debug/testtarget-debug.apk 2>&1 | tee install-testtarget.log; then adb logcat -d > logcat.txt || true; exit 1; fi; if ! ./gradlew :app:connectedDebugAndroidTest --no-daemon --console=plain 2>&1 | tee connected-test.log; then adb logcat -d > logcat.txt || true; exit 1; fi'
       - name: Surface emulator diagnostics
         if: always()
         continue-on-error: true
