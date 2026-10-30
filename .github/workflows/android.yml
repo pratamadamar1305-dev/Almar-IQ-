@@ -55,6 +55,15 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import xml.etree.ElementTree as ET
+          for name in ('install-testtarget.log', 'connected-test.log'):
+              p = Path(name)
+              if p.exists():
+                  lines = p.read_text(errors='replace').splitlines()
+                  for line in lines[-120:]:
+                      print('::error::TAIL ' + name + ' ' + line.replace('%', '%25').replace('\n', '%0A'))
+                  for line in lines:
+                      if any(t in line for t in ('e: file:', 'error:', 'FAILED', 'Exception', 'What went wrong', 'Execution failed', 'INSTALL_', 'Failure')):
+                          print('::error::' + line.replace('%', '%25').replace('\n', '%0A'))
           for name in ('test-build.log', 'app-build.log'):
               p = Path(name)
               if p.exists():
@@ -127,21 +136,6 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import xml.etree.ElementTree as ET
-          for name in ('accessibility-setting.txt',):
-              p = Path(name)
-              if p.exists(): print('::error::ACCESSIBILITY_SETTING=' + p.read_text(errors='replace').replace('\n', '%0A'))
-          for name in ('logcat.txt',):
-              p = Path(name)
-              if p.exists():
-                  for line in p.read_text(errors='replace').splitlines():
-                      if any(t in line for t in ('Jeda', 'jedasholat', 'AndroidRuntime', 'FATAL', 'AccessibilityService', 'accessibility')):
-                          print('::error::LOGCAT ' + line.replace('%', '%25').replace('\n', '%0A'))
-          p = Path('accessibility-dump.txt')
-          if p.exists():
-              text = p.read_text(errors='replace')
-              for line in text.splitlines():
-                  if any(t in line for t in ('jedasholat', 'Jeda', 'bound', 'crashed', 'installed')):
-                      print('::error::DUMPSYS ' + line.replace('%', '%25').replace('\n', '%0A'))
           for name in ('install-testtarget.log', 'connected-test.log'):
               p = Path(name)
               if p.exists():
@@ -151,6 +145,21 @@ jobs:
                   for line in lines:
                       if any(t in line for t in ('e: file:', 'error:', 'FAILED', 'Exception', 'What went wrong', 'Execution failed', 'INSTALL_', 'Failure')):
                           print('::error::' + line.replace('%', '%25').replace('\n', '%0A'))
+          for name in ('accessibility-setting.txt',):
+              p = Path(name)
+              if p.exists(): print('::error::ACCESSIBILITY_SETTING=' + p.read_text(errors='replace').replace('\n', '%0A'))
+          for name in ('logcat.txt',):
+              p = Path(name)
+              if p.exists():
+                  for line in p.read_text(errors='replace').splitlines():
+                      if any(t in line for t in ('jedasholat', 'FATAL', 'AndroidRuntime')) or ('Accessibility' in line and 'jedasholat' in line):
+                          print('::error::LOGCAT ' + line.replace('%', '%25').replace('\n', '%0A'))
+          p = Path('accessibility-dump.txt')
+          if p.exists():
+              text = p.read_text(errors='replace')
+              for line in text.splitlines():
+                  if any(t in line for t in ('jedasholat', 'Jeda', 'bound', 'crashed', 'installed')):
+                      print('::error::DUMPSYS ' + line.replace('%', '%25').replace('\n', '%0A'))
           for p in Path('app/build/outputs/androidTest-results').glob('**/TEST-*.xml'):
               for case in ET.parse(p).getroot().iter('testcase'):
                   for fail in list(case.iter('failure')) + list(case.iter('error')):
