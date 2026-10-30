@@ -41,7 +41,7 @@ class JedaAccessibilityService : AccessibilityService() {
     private var sessions = emptyList<Session>()
     private var foreground = ""
     private var shownKey = ""
-    private var lastAnnouncedMinute = -1L
+    private var lastAnnouncedMinute = -1
     private var overlay: View? = null
     private var timerText: TextView? = null
     private var titleText: TextView? = null

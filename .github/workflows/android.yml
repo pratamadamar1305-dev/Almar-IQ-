@@ -116,11 +116,9 @@ jobs:
           arch: x86_64
           profile: pixel_6
           disable-animations: true
-          script: |
-            cd android
-            adb wait-for-device
-            adb install -r testtarget/build/outputs/apk/debug/testtarget-debug.apk
-            ./gradlew :app:connectedDebugAndroidTest --no-daemon --console=plain 2>&1 | tee connected-test.log
+          emulator-boot-timeout: 600
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: bash -c 'set -o pipefail; cd android; adb wait-for-device; adb install -r testtarget/build/outputs/apk/debug/testtarget-debug.apk 2>&1 | tee install-testtarget.log; ./gradlew :app:connectedDebugAndroidTest --no-daemon --console=plain 2>&1 | tee connected-test.log'
       - name: Upload instrumented reports
         if: always()
         uses: actions/upload-artifact@v5
@@ -130,4 +128,5 @@ jobs:
             android/app/build/reports/androidTests/
             android/app/build/outputs/androidTest-results/
             android/connected-test.log
+            android/install-testtarget.log
           if-no-files-found: warn
