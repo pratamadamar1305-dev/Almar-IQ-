@@ -70,7 +70,7 @@ import id.jedasholat.ui.*
         item { JedaCard {
             SectionTitle("Tampilan & notifikasi")
             Row { Theme.entries.forEach { theme -> TextButton(onClick = { vm.update { it.copy(theme = theme) } }) {
-                Text(when(theme) { Theme.SYSTEM -> "Sistem" Theme.LIGHT -> "Terang" Theme.DARK -> "Gelap" },
+                Text(when(theme) { Theme.SYSTEM -> "Sistem"; Theme.LIGHT -> "Terang"; Theme.DARK -> "Gelap" },
                     color = if (s.theme == theme) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
             } }
             Row(verticalAlignment = Alignment.CenterVertically) { Text("Notifikasi jeda", Modifier.weight(1f)); Switch(s.notifications, { value -> vm.update { it.copy(notifications = value) } }) }
