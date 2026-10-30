@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.Intent
 import id.jedasholat.app.JedaApplication
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.first
+import id.jedasholat.core.Prayer
 
 class ScheduleReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -17,10 +19,10 @@ class ScheduleReceiver : BroadcastReceiver() {
                 if (kind.startsWith("REMIND:")) {
                     val id = kind.removePrefix("REMIND:").substringBeforeLast(':')
                     val session = app.container.database.sessions().all().firstOrNull { it.id == id }
-                    val settings = app.container.settings.settings.let { kotlinx.coroutines.flow.first(it) }
+                    val settings = app.container.settings.settings.first()
                     val delta = (session?.start ?: 0L) - System.currentTimeMillis()
                     if (session?.status == "SCHEDULED" && settings.protectionEnabled && settings.notifications && delta in -120_000L..31 * 60_000L) {
-                        Notifications.send(context, kind.hashCode(), "${session.prayer.label} segera tiba",
+                        Notifications.send(context, kind.hashCode(), "${Prayer.valueOf(session.prayer).label} segera tiba",
                             "Siapkan waktu untuk jeda. Aplikasi pilihanmu akan dibatasi sesuai jadwal.")
                     }
                 }
