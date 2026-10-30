@@ -109,6 +109,8 @@ class EnforcementSmokeTest {
         context.startActivity(intent)
     }
     private fun shell(command: String) {
-        instrumentation.uiAutomation.executeShellCommand(command).use { it.readBytes() }
+        instrumentation.uiAutomation.executeShellCommand(command).use { fd ->
+            android.os.ParcelFileDescriptor.AutoCloseInputStream(fd).use { it.readBytes() }
+        }
     }
 }
