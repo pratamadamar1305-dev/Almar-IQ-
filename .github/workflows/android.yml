@@ -124,11 +124,14 @@ jobs:
           target: google_apis
           arch: x86_64
           profile: pixel_6
+          cores: 2
+          ram-size: 2048
+          heap-size: 256
           disable-animations: true
           emulator-boot-timeout: 600
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           working-directory: android
-          script: bash -c 'set -o pipefail; pwd; adb wait-for-device; if ! adb install -r testtarget/build/outputs/apk/debug/testtarget-debug.apk 2>&1 | tee install-testtarget.log; then adb logcat -d > logcat.txt || true; exit 1; fi; if ! ./gradlew :app:connectedDebugAndroidTest --no-daemon --console=plain 2>&1 | tee connected-test.log; then adb logcat -d > logcat.txt || true; adb shell uiautomator dump /sdcard/jeda-window.xml || true; adb pull /sdcard/jeda-window.xml window.xml || true; adb shell settings get secure enabled_accessibility_services > accessibility-setting.txt || true; adb shell dumpsys accessibility > accessibility-dump.txt || true; exit 1; fi'
+          script: bash -c 'set -o pipefail; pwd; adb wait-for-device; if ! adb install -r testtarget/build/outputs/apk/debug/testtarget-debug.apk 2>&1 | tee install-testtarget.log; then adb logcat -d > logcat.txt || true; exit 1; fi; if ! ./gradlew :app:connectedDebugAndroidTest --no-daemon --console=plain --max-workers=2 -Dorg.gradle.jvmargs=-Xmx1536m -Pkotlin.compiler.execution.strategy=in-process 2>&1 | tee connected-test.log; then adb logcat -d > logcat.txt || true; adb shell uiautomator dump /sdcard/jeda-window.xml || true; adb pull /sdcard/jeda-window.xml window.xml || true; adb shell settings get secure enabled_accessibility_services > accessibility-setting.txt || true; adb shell dumpsys accessibility > accessibility-dump.txt || true; exit 1; fi'
       - name: Surface emulator diagnostics
         if: always()
         continue-on-error: true
