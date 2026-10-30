@@ -48,7 +48,7 @@ export function windowsFor(now: Date, settings: Settings): Window[] {
   const [y, m, d] = dateInZone(now, settings.zone).split('-').map(Number);
   const params = new CalculationParameters('Other', 20, 18);
   params.madhab = settings.hanafi ? Madhab.Hanafi : Madhab.Shafi;
-  params.highLatitudeRule = HighLatitudeRule.MiddleOfTheNight;
+  params.highLatitudeRule = HighLatitudeRule.TwilightAngle;
   const times = new PrayerTimes(new Coordinates(settings.lat, settings.lng), new Date(y, m - 1, d, 12), params);
   const starts = [times.fajr, times.dhuhr, times.asr, times.maghrib, times.isha];
   return PRAYERS.flatMap((prayer, i) => {

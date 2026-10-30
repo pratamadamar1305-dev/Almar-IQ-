@@ -22,7 +22,7 @@ data class UiState(
     val zone: ZoneId get() = runCatching { ZoneId.of(settings.zoneId) }.getOrDefault(ZoneId.systemDefault())
     val today: LocalDate get() = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
 
-    val next: PrayerWindow? get() = windows.firstOrNull { it.end > now }
+    val next: PrayerWindow? get() = windows.firstOrNull { it.start > now }
     val active: List<Session> get() = SessionEngine.active(sessions, now)
     val ready: Boolean get() = settings.protectionEnabled && settings.accessibilityConsent && capabilities.accessibility && settings.selectedPackages.isNotEmpty()
 }
@@ -33,8 +33,10 @@ class JedaViewModel(app: Application) : AndroidViewModel(app) {
     val state: StateFlow<UiState> = combine(container.settings.settings, container.database.sessions().observe(), extra) { settings, rows, e ->
         e.copy(settings = settings, sessions = rows.map { it.toDomain() }, loading = false,
             windows = runCatching {
-                val date = Instant.ofEpochMilli(e.now).atZone(ZoneId.of(settings.zoneId)).toLocalDate().toString()
-                WindowFactory.create(date, container.calculator.calculate(date, settings), settings)
+                val today = Instant.ofEpochMilli(e.now).atZone(ZoneId.of(settings.zoneId)).toLocalDate()
+                listOf(today, today.plusDays(1)).flatMap { date ->
+                    WindowFactory.create(date.toString(), container.calculator.calculate(date.toString(), settings), settings)
+                }.sortedBy { it.start }
             }.getOrDefault(emptyList()),
             scheduleError = runCatching {
                 val date = Instant.ofEpochMilli(e.now).atZone(ZoneId.of(settings.zoneId)).toLocalDate().toString()

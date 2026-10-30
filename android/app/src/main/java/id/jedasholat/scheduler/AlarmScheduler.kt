@@ -18,7 +18,7 @@ class AlarmScheduler(private val context: Context) {
             .flatMap { s -> listOf(s.start to "START", s.end to "END") + listOfNotNull(s.snoozedUntil?.let { it to "SNOOZE_END" }) }
         val reminders = windows.filter { w -> sessions.any { it.id == w.id && it.status == SessionStatus.SCHEDULED } }
             .mapNotNull { w -> if (w.reminderMinutes > 0) (w.start - w.reminderMinutes * 60_000L) to "REMIND:${w.id}:${w.start}" else null }
-        val desired = (events + reminders).filter { it.first > now }.distinctBy { it.first }.sortedBy { it.first }.take(40)
+        val desired = (events + reminders).filter { it.first > now }.sortedBy { it.first }.take(40)
             .associate { (time, kind) -> "$time|$kind" to (time to kind) }
         val previous = registry.getStringSet("pending", emptySet()) ?: emptySet()
         (previous - desired.keys).forEach { key ->
