@@ -116,7 +116,7 @@ class EnforcementSmokeTest {
         device.waitForIdle(2000)
         var entry = device.wait(Until.findObject(By.textContains("JedaSholat")), 5000)
         if (entry == null) {
-            device.scroll(android.graphics.Point(540, 1600), android.graphics.Point(540, 600))
+            device.swipe(540, 1600, 540, 600, 20)
             entry = device.wait(Until.findObject(By.textContains("JedaSholat")), 3000)
         }
         if (entry != null) {
