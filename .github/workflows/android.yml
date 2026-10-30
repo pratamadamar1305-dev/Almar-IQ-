@@ -55,7 +55,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import xml.etree.ElementTree as ET
-          for name in ('install-testtarget.log', 'install-app.log', 'install-test.log', 'connected-test.log'):
+          for name in ('build-test-apks.log', 'install-testtarget.log', 'install-app.log', 'install-test.log', 'connected-test.log'):
               p = Path(name)
               if p.exists():
                   lines = p.read_text(errors='replace').splitlines()
@@ -116,7 +116,9 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - name: Build app and test APKs
-        run: ./gradlew :testtarget:assembleDebug :app:assembleDebug :app:assembleDebugAndroidTest --no-daemon --console=plain
+        run: |
+          set -o pipefail
+          ./gradlew :testtarget:assembleDebug :app:assembleDebug :app:assembleDebugAndroidTest --no-daemon --console=plain 2>&1 | tee build-test-apks.log
       - name: Android 15 enforcement smoke test
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -144,11 +146,11 @@ jobs:
                   for fail in list(case.iter('failure')) + list(case.iter('error')):
                       message = case.get('name', '') + ' ' + fail.get('message', '')
                       print('::error::TEST ' + message.replace('%', '%25').replace('\n', '%0A'))
-          for name in ('install-testtarget.log', 'install-app.log', 'install-test.log', 'connected-test.log'):
+          for name in ('build-test-apks.log', 'install-testtarget.log', 'install-app.log', 'install-test.log', 'connected-test.log'):
               p = Path(name)
               if p.exists():
                   for line in p.read_text(errors='replace').splitlines():
-                      if any(t in line for t in ('Success', 'Failure', 'INSTALL_', 'Tests run', 'OK (', 'FAILED', 'AssertionError', 'not bound', 'not enabled', 'Service', 'Process crashed', 'INSTRUMENTATION')):
+                      if any(t in line for t in ('e: file:', 'Success', 'Failure', 'INSTALL_', 'Tests run', 'OK (', 'FAILED', 'AssertionError', 'not bound', 'not enabled', 'Service', 'Process crashed', 'INSTRUMENTATION')):
                           print('::error::LINE ' + name + ' ' + line.replace('%', '%25').replace('\n', '%0A'))
           p = Path('accessibility-setting.txt')
           if p.exists(): print('::error::ACCESSIBILITY_SETTING=' + p.read_text(errors='replace').replace('\n', '%0A'))
@@ -172,6 +174,7 @@ jobs:
             android/app/build/reports/androidTests/
             android/app/build/outputs/androidTest-results/
             android/connected-test.log
+            android/build-test-apks.log
             android/install-testtarget.log
             android/install-app.log
             android/install-test.log
