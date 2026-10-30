@@ -33,12 +33,20 @@ class EnforcementSmokeTest {
     private val service = "id.jedasholat.app/id.jedasholat.service.JedaAccessibilityService"
 
     @Before fun setUp() {
+        val own = context.packageManager.getLaunchIntentForPackage("id.jedasholat.app")
+        if (own != null) {
+            own.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(own)
+            device.wait(Until.hasObject(By.pkg("id.jedasholat.app")), 5000)
+        }
         device.pressHome()
         runCatching { shell("appops set id.jedasholat.app ACCESS_RESTRICTED_SETTINGS allow") }
         shell("settings put secure enabled_accessibility_services $service")
         shell("settings put secure accessibility_enabled 1")
         val enabled = android.provider.Settings.Secure.getString(context.contentResolver, android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: ""
         assertTrue("Service not enabled: $enabled", enabled.contains(service))
+        val dump = shell("dumpsys accessibility")
+        assertTrue("Accessibility service not bound. dump=${dump.take(4000)}", dump.contains("JedaAccessibilityService"))
         runBlocking {
             container.database.sessions().clear()
             container.settings.update {
@@ -110,9 +118,9 @@ class EnforcementSmokeTest {
         intent!!.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK)
         context.startActivity(intent)
     }
-    private fun shell(command: String) {
+    private fun shell(command: String): String {
         instrumentation.uiAutomation.executeShellCommand(command).use { fd ->
-            android.os.ParcelFileDescriptor.AutoCloseInputStream(fd).use { it.readBytes() }
+            return android.os.ParcelFileDescriptor.AutoCloseInputStream(fd).use { it.readBytes().toString(Charsets.UTF_8) }
         }
     }
 }
