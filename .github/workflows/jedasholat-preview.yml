@@ -32,5 +32,5 @@ jobs:
         if: always()
         with:
           name: JedaSholat-screenshots
-          path: /home/runner/work/Almar-IQ-/Almar-IQ-/jeda-*.png
+          path: preview/test-results/jeda-*.png
           if-no-files-found: warn

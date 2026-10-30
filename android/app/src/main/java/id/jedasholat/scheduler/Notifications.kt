@@ -26,6 +26,8 @@ object Notifications {
         val n = NotificationCompat.Builder(context, CHANNEL).setSmallIcon(R.drawable.ic_jeda)
             .setContentTitle(title).setContentText(text).setContentIntent(intent).setAutoCancel(true)
             .setCategory(NotificationCompat.CATEGORY_REMINDER).setOnlyAlertOnce(true).build()
-        runCatching { NotificationManagerCompat.from(context).notify(id, n) }
+        if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            try { NotificationManagerCompat.from(context).notify(id, n) } catch (_: SecurityException) { /* Permission may be revoked between check and call. */ }
+        }
     }
 }

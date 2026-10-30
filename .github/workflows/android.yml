@@ -52,7 +52,7 @@ jobs:
           for p in Path('.').glob('*/build/test-results/*/TEST-*.xml'):
               for case in ET.parse(p).getroot().iter('testcase'):
                   for fail in case.iter('failure'):
-                      print('::error::' + (case.get('name','') + ' ' + fail.get('message','')).replace('%','%25').replace('\n','%0A'))
+                      print('::error::' + (case.get('name','') + ' ' + (fail.get('message','') + ' ' + (fail.text or '')).replace('%','%25').replace('\n','%0A'))
           for p in Path('.').glob('app/build/reports/lint-results-debug.txt'):
               for line in p.read_text(errors='replace').splitlines():
                   if 'Error:' in line: print('::error::' + line.replace('%','%25'))
