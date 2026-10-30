@@ -80,7 +80,7 @@ import id.jedasholat.ui.*
         if (history.isEmpty()) item { Text("Belum ada riwayat. Riwayat akan muncul setelah sesi berakhir.", fontSize = 14.sp) }
         items(history, key = { it.id }) { session -> JedaCard {
             Row { Text("${session.prayer.label} · ${session.date}", Modifier.weight(1f)); Text(when(session.status) {
-                SessionStatus.COMPLETED -> "Selesai" SessionStatus.CANCELLED -> "Dihentikan" SessionStatus.INTERRUPTED -> "Terputus" else -> "Terlewat"
+                SessionStatus.COMPLETED -> "Selesai"; SessionStatus.CANCELLED -> "Dihentikan"; SessionStatus.INTERRUPTED -> "Terputus"; else -> "Terlewat"
             }, fontSize = 13.sp) }
             Text("${time(session.start, state.zone)}–${time(session.end, state.zone)}", fontSize = 12.sp)
         } }

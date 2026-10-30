@@ -99,7 +99,7 @@ class JedaAccessibilityService : AccessibilityService() {
         val locked = getSystemService(KeyguardManager::class.java).isKeyguardLocked
         val audio = getSystemService(AudioManager::class.java)
         val inCall = audio.mode == AudioManager.MODE_IN_CALL || audio.mode == AudioManager.MODE_IN_COMMUNICATION
-        val decision = if (locked || inCall) Decision.Allow else PolicyEngine.decide(
+        val decision = if (locked || inCall || !settings.accessibilityConsent) Decision.Allow else PolicyEngine.decide(
             foreground, packageName, safety, settings, sessions, now, dismissed)
         when (decision) {
             Decision.Allow -> hide()
