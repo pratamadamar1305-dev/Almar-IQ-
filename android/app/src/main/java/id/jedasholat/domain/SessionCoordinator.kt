@@ -24,6 +24,7 @@ class SessionCoordinator(
         val capabilities = PermissionReader.read(context)
         val windows = windows(settings, now)
         val old = dao.all().map { it.toDomain() }
+        val today = Instant.ofEpochMilli(now).atZone(ZoneId.of(settings.zoneId)).toLocalDate()
         val coveredDates = (-1L..2L).map { today.plusDays(it).toString() }.toSet()
         val ids = windows.map { it.id }.toSet()
         // A disabled future prayer is cancelled, not left as a stale alarm/session.
