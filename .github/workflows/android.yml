@@ -40,8 +40,17 @@ jobs:
         run: |
           mkdir -p app/build/reports core/build/reports
           cp -f test-build.log app-build.log app/build/reports/ || true
-          grep -hE '^e:|error:|FAILED|What went wrong|Execution failed' test-build.log app-build.log 2>/dev/null | while IFS= read -r line; then echo "::error::$line"; done || true
+          python3 - <<'PY'
+          from pathlib import Path
+          for name in ('test-build.log', 'app-build.log'):
+              p = Path(name)
+              if p.exists():
+                  for line in p.read_text(errors='replace').splitlines():
+                      if any(token in line for token in ('e: file:', 'error:', 'FAILED', 'What went wrong', 'Execution failed')):
+                          print('::error::' + line.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A'))
+          PY
       - uses: actions/upload-artifact@v5
+        if: steps.build.outcome == 'success'
         with:
           name: JedaSholat-debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
@@ -53,7 +62,6 @@ jobs:
           path: |
             android/app/build/reports/
             android/core/build/reports/
-
       - name: Report build status
         if: always()
         run: |
