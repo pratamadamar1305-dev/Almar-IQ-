@@ -1,7 +1,9 @@
 package id.jedasholat.domain
 
 import com.batoulapps.adhan.*
-import id.jedasholat.core.*
+import id.jedasholat.core.Prayer
+import id.jedasholat.core.PrayerCalculator
+import id.jedasholat.core.Settings
 import java.time.LocalDate
 import java.time.ZoneId
 import com.batoulapps.adhan.data.DateComponents
