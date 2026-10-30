@@ -62,10 +62,14 @@ jobs:
                       if any(token in line for token in ('e: file:', 'error:', 'FAILED', 'What went wrong', 'Execution failed', 'Error:')):
                           print('::error::' + line.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A'))
           for p in Path('.').glob('*/build/test-results/*/TEST-*.xml'):
-              for case in ET.parse(p).getroot().iter('testcase'):
-                  for fail in case.iter('failure'):
-                      message = case.get('name', '') + ' ' + fail.get('message', '') + ' ' + (fail.text or '')
+              root = ET.parse(p).getroot()
+              for case in root.iter('testcase'):
+                  for fail in list(case.iter('failure')) + list(case.iter('error')):
+                      message = case.get('name', '') + ' ' + fail.get('message', '') + '\n' + (fail.text or '')
                       print('::error::' + message.replace('%', '%25').replace('\n', '%0A'))
+              system = root.find('system-out')
+              if system is not None and system.text:
+                  print(system.text)
           PY
       - name: Upload reports
         if: always()
@@ -75,6 +79,8 @@ jobs:
           path: |
             android/app/build/reports/
             android/core/build/reports/
+            android/app/build/test-results/
+            android/core/build/test-results/
           if-no-files-found: warn
       - name: Report build status
         if: always()
@@ -112,8 +118,9 @@ jobs:
           disable-animations: true
           script: |
             cd android
+            adb wait-for-device
             adb install -r testtarget/build/outputs/apk/debug/testtarget-debug.apk
-            ./gradlew :app:connectedDebugAndroidTest --no-daemon --console=plain
+            ./gradlew :app:connectedDebugAndroidTest --no-daemon --console=plain 2>&1 | tee connected-test.log
       - name: Upload instrumented reports
         if: always()
         uses: actions/upload-artifact@v5
@@ -122,4 +129,5 @@ jobs:
           path: |
             android/app/build/reports/androidTests/
             android/app/build/outputs/androidTest-results/
+            android/connected-test.log
           if-no-files-found: warn

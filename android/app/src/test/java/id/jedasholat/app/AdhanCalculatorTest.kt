@@ -25,7 +25,8 @@ class AdhanCalculatorTest {
             java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("America/New_York"))
             val a = calculator.calculate("2026-10-30", s)
             java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("Asia/Tokyo"))
-            assertEquals(a, calculator.calculate("2026-10-30", s))
+            val b = calculator.calculate("2026-10-30", s)
+            assertEquals("New York=$a Tokyo=$b", a, b)
         } finally { java.util.TimeZone.setDefault(original) }
     }
     @Test fun hanafiAsrIsLater() {

@@ -18,6 +18,7 @@ import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.widget.Button
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import id.jedasholat.app.JedaApplication
 import id.jedasholat.core.*
@@ -40,6 +41,7 @@ class JedaAccessibilityService : AccessibilityService() {
     private var sessions = emptyList<Session>()
     private var foreground = ""
     private var shownKey = ""
+    private var lastAnnouncedMinute = -1L
     private var overlay: View? = null
     private var timerText: TextView? = null
     private var titleText: TextView? = null
@@ -86,13 +88,15 @@ class JedaAccessibilityService : AccessibilityService() {
             android.os.Process.myUid(), packageName) == AppOpsManager.MODE_ALLOWED }.getOrDefault(false)
         if (!allowed || !settings.usageConsent) return ""
         val now = System.currentTimeMillis()
-        val events = getSystemService(UsageStatsManager::class.java).queryEvents(now - 60 * 60_000L, now)
-        var result = ""; val event = UsageEvents.Event()
-        while (events.hasNextEvent()) {
-            events.getNextEvent(event)
-            if (event.eventType == UsageEvents.Event.MOVE_TO_FOREGROUND) result = event.packageName
-        }
-        return result
+        return runCatching {
+            val events = getSystemService(UsageStatsManager::class.java).queryEvents(now - 60 * 60_000L, now)
+            var result = ""; val event = UsageEvents.Event()
+            while (events.hasNextEvent()) {
+                events.getNextEvent(event)
+                if (event.eventType == UsageEvents.Event.MOVE_TO_FOREGROUND) result = event.packageName
+            }
+            result
+        }.getOrDefault("")
     }
     private fun evaluate() {
         val now = System.currentTimeMillis()
@@ -113,9 +117,11 @@ class JedaAccessibilityService : AccessibilityService() {
         shownKey = key
         if (overlay == null) {
             val context = this
-            val root = LinearLayout(context).apply {
+            val density = resources.displayMetrics.density
+            fun dp(value: Int) = (value * density).toInt()
+            val content = LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
-                setPadding(56, 64, 56, 64); setBackgroundColor(Color.rgb(18, 63, 53))
+                setPadding(dp(24), dp(28), dp(24), dp(28)); setBackgroundColor(Color.rgb(18, 63, 53))
                 isClickable = true; isFocusable = true
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
             }
@@ -123,14 +129,14 @@ class JedaAccessibilityService : AccessibilityService() {
                 this.text = text; textSize = size; setTextColor(color); gravity = Gravity.CENTER
                 setPadding(0, 12, 0, 12)
             }
-            root.addView(label("JEDA SHOLAT", 13f, Color.rgb(201, 169, 106)))
+            content.addView(label("JEDA SHOLAT", 13f, Color.rgb(201, 169, 106)))
             titleText = label("Waktunya jeda sebentar.", 28f).apply { typeface = Typeface.DEFAULT_BOLD }
-            root.addView(titleText)
-            root.addView(label("Tarik napas. Hanya aplikasi pilihanmu yang sedang dibatasi.", 16f))
+            content.addView(titleText)
+            content.addView(label("Tarik napas. Hanya aplikasi pilihanmu yang sedang dibatasi.", 16f))
             timerText = label("", 44f).apply { typeface = Typeface.MONOSPACE }
-            root.addView(timerText)
+            content.addView(timerText)
             if (!strict) {
-                root.addView(Button(context).apply {
+                content.addView(Button(context).apply {
                     text = if (!session.snoozeUsed) "Tunda 5 menit (1×)" else "Lanjut tanpa pengingat"
                     setOnClickListener {
                         if (!session.snoozeUsed) {
@@ -141,17 +147,20 @@ class JedaAccessibilityService : AccessibilityService() {
                     }
                 })
             }
-            root.addView(Button(context).apply {
+            content.addView(Button(context).apply {
                 text = "Kembali ke layar utama"; setOnClickListener {
                     hide(); performGlobalAction(GLOBAL_ACTION_HOME)
                 }
             })
-            root.addView(Button(context).apply {
+            content.addView(Button(context).apply {
                 text = "Buka telepon / darurat"; setOnClickListener {
                     hide(); runCatching { startActivity(Intent(Intent.ACTION_DIAL).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
                 }
             })
-            root.addView(label("Mode Tegas bukan kunci permanen. Izin Android tetap dapat dicabut.", 12f))
+            content.addView(label(if (strict) "Mode Tegas bukan kunci permanen. Izin Android tetap dapat dicabut." else "Kamu tetap memegang kendali. Jeda selesai otomatis.", 12f))
+            val root = ScrollView(context).apply {
+                isFillViewport = true; setBackgroundColor(Color.rgb(18, 63, 53)); addView(content)
+            }
             val params = WindowManager.LayoutParams(
                 WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT,
                 WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
@@ -167,11 +176,15 @@ class JedaAccessibilityService : AccessibilityService() {
         val seconds = (remaining + 999L) / 1000L
         timerText?.text = "%02d:%02d".format(seconds / 60, seconds % 60)
         titleText?.text = if (strict) "Jeda ${session.prayer.label}" else "Waktunya jeda sebentar."
-        overlay?.announceForAccessibility("Jeda ${session.prayer.label}, tersisa ${seconds / 60} menit")
+        val minutes = (seconds / 60).toInt()
+        if (minutes != lastAnnouncedMinute) {
+            lastAnnouncedMinute = minutes
+            overlay?.announceForAccessibility("Jeda ${session.prayer.label}, tersisa $minutes menit")
+        }
     }
     private fun hide() {
         handler.removeCallbacks(ticker)
         overlay?.let { runCatching { getSystemService(WindowManager::class.java).removeViewImmediate(it) } }
-        overlay = null; timerText = null; titleText = null; shownKey = ""
+        overlay = null; timerText = null; titleText = null; shownKey = ""; lastAnnouncedMinute = -1L
     }
 }
