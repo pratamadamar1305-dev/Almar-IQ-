@@ -55,7 +55,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import xml.etree.ElementTree as ET
-          for name in ('install-testtarget.log', 'connected-test.log'):
+          for name in ('install-testtarget.log', 'install-app.log', 'install-test.log', 'connected-test.log'):
               p = Path(name)
               if p.exists():
                   lines = p.read_text(errors='replace').splitlines()
@@ -115,8 +115,8 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Build test target
-        run: ./gradlew :testtarget:assembleDebug --no-daemon --console=plain
+      - name: Build app and test APKs
+        run: ./gradlew :testtarget:assembleDebug :app:assembleDebug :app:assembleDebugAndroidTest --no-daemon --console=plain
       - name: Android 15 enforcement smoke test
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -131,7 +131,7 @@ jobs:
           emulator-boot-timeout: 600
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           working-directory: android
-          script: bash -c 'set -o pipefail; pwd; adb wait-for-device; if ! adb install -r testtarget/build/outputs/apk/debug/testtarget-debug.apk 2>&1 | tee install-testtarget.log; then adb logcat -d > logcat.txt || true; exit 1; fi; if ! ./gradlew :app:connectedDebugAndroidTest --no-daemon --console=plain --max-workers=2 -Dorg.gradle.jvmargs=-Xmx1536m -Pkotlin.compiler.execution.strategy=in-process 2>&1 | tee connected-test.log; then adb logcat -d > logcat.txt || true; adb shell uiautomator dump /sdcard/jeda-window.xml || true; adb pull /sdcard/jeda-window.xml window.xml || true; adb shell settings get secure enabled_accessibility_services > accessibility-setting.txt || true; adb shell dumpsys accessibility > accessibility-dump.txt || true; exit 1; fi'
+          script: bash -c 'set -o pipefail; pwd; adb wait-for-device; if ! adb install -r testtarget/build/outputs/apk/debug/testtarget-debug.apk 2>&1 | tee install-testtarget.log; then exit 1; fi; if ! adb install -r app/build/outputs/apk/debug/app-debug.apk 2>&1 | tee install-app.log; then exit 1; fi; if ! adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk 2>&1 | tee install-test.log; then exit 1; fi; adb shell am instrument -w -e class id.jedasholat.app.EnforcementSmokeTest id.jedasholat.app.test/androidx.test.runner.AndroidJUnitRunner 2>&1 | tee connected-test.log; if ! grep -q "OK (3 tests)" connected-test.log; then adb logcat -d > logcat.txt || true; adb shell uiautomator dump /sdcard/jeda-window.xml || true; adb pull /sdcard/jeda-window.xml window.xml || true; adb shell settings get secure enabled_accessibility_services > accessibility-setting.txt || true; adb shell dumpsys accessibility > accessibility-dump.txt || true; exit 1; fi'
       - name: Surface emulator diagnostics
         if: always()
         continue-on-error: true
@@ -139,7 +139,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import xml.etree.ElementTree as ET
-          for name in ('install-testtarget.log', 'connected-test.log'):
+          for name in ('install-testtarget.log', 'install-app.log', 'install-test.log', 'connected-test.log'):
               p = Path(name)
               if p.exists():
                   lines = p.read_text(errors='replace').splitlines()
@@ -179,6 +179,8 @@ jobs:
             android/app/build/outputs/androidTest-results/
             android/connected-test.log
             android/install-testtarget.log
+            android/install-app.log
+            android/install-test.log
             android/logcat.txt
             android/window.xml
             android/accessibility-setting.txt
