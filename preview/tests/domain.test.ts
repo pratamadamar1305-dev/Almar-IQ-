@@ -1,0 +1,30 @@
+import { describe, expect, it } from 'vitest';
+import { DEFAULT_SETTINGS, PRAYERS, activeWindow, countdown, dateInZone, demoDecision, nextWindow, snoozeDemo, validateSettings, windowsFor, type DemoSession } from '../src/domain';
+const now = new Date('2026-10-30T03:00:00Z');
+const settings = structuredClone(DEFAULT_SETTINGS);
+const start = now.getTime();
+const session: DemoSession = { prayer: 'Dzuhur', start, end: start + 30000, mode: 'Tegas' };
+describe('offline prayer schedule', () => {
+  it('produces five ordered prayer windows, never sunrise', () => { const w = windowsFor(now, settings); expect(w.map(x => x.prayer)).toEqual(PRAYERS); expect(w.every((x,i) => i === 0 || x.start > w[i-1].start)).toBe(true); });
+  it('uses 20 minute default durations', () => { for (const w of windowsFor(now, settings)) expect(w.end.getTime() - w.start.getTime()).toBe(1200000); });
+  it('handles date boundaries in all Indonesian zones', () => { expect(dateInZone(new Date('2026-10-30T17:30:00Z'), 'Asia/Jakarta')).toBe('2026-10-31'); expect(dateInZone(new Date('2026-10-30T17:30:00Z'), 'Asia/Makassar')).toBe('2026-10-31'); expect(dateInZone(new Date('2026-10-30T14:30:00Z'), 'Asia/Jayapura')).toBe('2026-10-30'); });
+  it('changes schedule by coordinates', () => { const a = windowsFor(now, settings)[1]; const b = windowsFor(now, {...settings, lng: 140.7})[1]; expect(a.start.getTime()).not.toBe(b.start.getTime()); });
+  it('applies per-prayer offsets and duration', () => { const s = structuredClone(settings); s.rules.Dzuhur.offset = 3; s.rules.Dzuhur.duration = 45; const a = windowsFor(now, settings)[1], b = windowsFor(now,s)[1]; expect(b.start.getTime()-a.start.getTime()).toBe(180000); expect(b.end.getTime()-b.start.getTime()).toBe(2700000); });
+  it('omits disabled prayers', () => { const s = structuredClone(settings); s.rules.Subuh.enabled = false; expect(windowsFor(now,s).map(w=>w.prayer)).not.toContain('Subuh'); });
+  it('rejects invalid coordinates and durations', () => { expect(()=>validateSettings({...settings,lat:91})).toThrow(); expect(()=>validateSettings({...settings,lng:NaN})).toThrow(); const s=structuredClone(settings); s.rules.Isya.duration=0; expect(()=>validateSettings(s)).toThrow(); });
+  it('changes Asr with madhab', () => { const a=windowsFor(now,settings)[2], b=windowsFor(now,{...settings,hanafi:true})[2]; expect(b.start.getTime()).toBeGreaterThan(a.start.getTime()); });
+  it('handles leap day', () => { expect(windowsFor(new Date('2028-02-29T03:00:00Z'),settings)).toHaveLength(5); });
+  it('selects next only inside configured windows', () => { const w=windowsFor(now,settings); expect(nextWindow(w,w[0].start.getTime()-1)?.prayer).toBe('Subuh'); expect(nextWindow(w,w[4].end.getTime())).toBeUndefined(); });
+  it('never reports active outside boundaries', () => { const w=windowsFor(now,settings)[0]; expect(activeWindow(windowsFor(now,settings),w.start.getTime()-1)).toBeUndefined(); expect(activeWindow(windowsFor(now,settings),w.start.getTime())?.prayer).toBe('Subuh'); expect(activeWindow(windowsFor(now,settings),w.end.getTime())).toBeUndefined(); });
+});
+describe('simulation policy', () => {
+  it('blocks only selected apps during session', () => { expect(demoDecision(session,'tiktok',settings,start)).toBe('block'); expect(demoDecision(session,'chrome',settings,start)).toBe('allow'); });
+  it('whitelist wins', () => { expect(demoDecision(session,'whatsapp',{...settings,selected:['whatsapp'],whitelist:['whatsapp']},start)).toBe('allow'); });
+  it('respects disabled protection', () => { expect(demoDecision(session,'tiktok',{...settings,enabled:false},start)).toBe('allow'); });
+  it('allows before and after session', () => { expect(demoDecision(session,'tiktok',settings,start-1)).toBe('allow'); expect(demoDecision(session,'tiktok',settings,session.end)).toBe('allow'); });
+  it('reminder mode reminds', () => { expect(demoDecision({...session,mode:'Pengingat'},'tiktok',settings,start)).toBe('remind'); });
+  it('snoozes once without extending the original end', () => { const s=snoozeDemo({...session,mode:'Pengingat'},start); expect(s.snoozedUntil).toBe(start+30000); expect(s.end).toBe(session.end); expect(snoozeDemo(s,start+1)).toEqual(s); });
+  it('strict mode cannot snooze', () => { expect(snoozeDemo(session,start)).toEqual(session); });
+  it('suppresses during snooze', () => { const s=snoozeDemo({...session,mode:'Pengingat',end:start+600000},start); expect(demoDecision(s,'tiktok',settings,start+1)).toBe('allow'); expect(demoDecision(s,'tiktok',settings,start+300000)).toBe('remind'); });
+  it('countdown never becomes negative', () => { expect(countdown(start,start-61000)).toBe('01:01'); expect(countdown(start,start+1000)).toBe('00:00'); });
+});
