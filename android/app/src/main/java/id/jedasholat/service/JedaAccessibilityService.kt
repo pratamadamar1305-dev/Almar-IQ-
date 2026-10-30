@@ -58,6 +58,7 @@ class JedaAccessibilityService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+        android.util.Log.i("JedaService", "service connected")
         safety = AppCatalog.safetyPackages(this)
         scope.launch {
             settings = container.settings.settings.first()

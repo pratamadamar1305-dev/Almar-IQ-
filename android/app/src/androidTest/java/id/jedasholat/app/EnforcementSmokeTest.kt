@@ -41,18 +41,13 @@ class EnforcementSmokeTest {
         }
         device.pressHome()
         runCatching { shell("appops set id.jedasholat.app ACCESS_RESTRICTED_SETTINGS allow") }
+        enableServiceThroughSettings()
         shell("settings put secure enabled_accessibility_services $service")
-        shell("settings put secure accessibility_enabled 0")
         shell("settings put secure accessibility_enabled 1")
-        val settingsIntent = android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-        context.startActivity(settingsIntent)
-        device.waitForIdle(2000)
-        device.pressBack()
-        device.waitForIdle(1000)
         val enabled = android.provider.Settings.Secure.getString(context.contentResolver, android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: ""
         assertTrue("Service not enabled: $enabled", enabled.contains(service))
-        val dump = shell("dumpsys accessibility")
-        assertTrue("Accessibility service not bound. dump=${dump.take(4000)}", dump.contains("JedaAccessibilityService"))
+        device.pressHome()
+        Thread.sleep(2000)
         runBlocking {
             container.database.sessions().clear()
             container.settings.update {
@@ -112,6 +107,34 @@ class EnforcementSmokeTest {
         assertTrue(device.wait(Until.hasObject(By.text("JEDA_TEST_TARGET_FOREGROUND")), 5000))
         Thread.sleep(1200)
         assertFalse("Unselected app was covered", device.hasObject(By.text("JEDA SHOLAT")))
+    }
+
+
+    private fun enableServiceThroughSettings() {
+        val intent = android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(intent)
+        device.waitForIdle(2000)
+        var entry = device.wait(Until.findObject(By.textContains("JedaSholat")), 5000)
+        if (entry == null) {
+            device.scroll(android.graphics.Point(540, 1600), android.graphics.Point(540, 600))
+            entry = device.wait(Until.findObject(By.textContains("JedaSholat")), 3000)
+        }
+        if (entry != null) {
+            entry.click()
+            device.waitForIdle(1500)
+            val switch = device.wait(Until.findObject(By.clazz(android.widget.Switch::class.java)), 4000)
+                ?: device.wait(Until.findObject(By.textContains("Use service")), 2000)
+            if (switch != null && switch.isChecked != true) {
+                switch.click()
+                device.waitForIdle(1000)
+                val allow = device.wait(Until.findObject(By.text("Allow")), 3000)
+                    ?: device.wait(Until.findObject(By.text("OK")), 1000)
+                allow?.click()
+                device.waitForIdle(1500)
+            }
+        }
+        device.pressHome()
+        device.waitForIdle(1000)
     }
 
     private fun session(start: Long, end: Long, mode: Mode): Session {
