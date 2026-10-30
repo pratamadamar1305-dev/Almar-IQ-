@@ -128,13 +128,19 @@ jobs:
           import xml.etree.ElementTree as ET
           for name in ('accessibility-setting.txt',):
               p = Path(name)
-              if p.exists(): print('ACCESSIBILITY_SETTING=' + p.read_text(errors='replace'))
+              if p.exists(): print('::error::ACCESSIBILITY_SETTING=' + p.read_text(errors='replace').replace('\n', '%0A'))
           for name in ('logcat.txt',):
               p = Path(name)
               if p.exists():
                   for line in p.read_text(errors='replace').splitlines():
                       if any(t in line for t in ('Jeda', 'jedasholat', 'AndroidRuntime', 'FATAL', 'AccessibilityService', 'accessibility')):
-                          print(line)
+                          print('::error::LOGCAT ' + line.replace('%', '%25').replace('\n', '%0A'))
+          p = Path('accessibility-dump.txt')
+          if p.exists():
+              text = p.read_text(errors='replace')
+              for line in text.splitlines():
+                  if any(t in line for t in ('jedasholat', 'Jeda', 'bound', 'crashed', 'installed')):
+                      print('::error::DUMPSYS ' + line.replace('%', '%25').replace('\n', '%0A'))
           for name in ('install-testtarget.log', 'connected-test.log'):
               p = Path(name)
               if p.exists():
