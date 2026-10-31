@@ -34,3 +34,9 @@ Original crescent + pause-bars mark. The crescent means returning to prayer; the
 
 ## Verification boundary
 Compose/Android resources are compiled and linted in CI. Native UI smoke tests capture screenshots on an emulator. Accessibility enforcement still requires the physical-device checklist; a green UI test is not proof of OEM enforcement reliability. Dojo Tarung is not modified.
+
+## Evidence
+- Android run `41171626489` (feature branch): `build`, `Native UI smoke + screenshots`, and `Publish verified debug APK` succeeded; `UiSmokeTest` reported `OK (3 tests)`.
+- The advisory `instrumented` enforcement job still fails on the CI emulator because AccessibilityService binding is unreliable there. This is not counted as device verification.
+- Native emulator screenshots are stored in `docs/design/screenshots/`: home light/dark, onboarding, expanded schedule, apps, settings, and 1.3× font scale.
+- Release asset `JedaSholat-debug.apk` was updated to 0.2.0 (28,880,789 bytes) with a matching `.sha256`.
