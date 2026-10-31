@@ -138,7 +138,7 @@ jobs:
           emulator-boot-timeout: 600
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           working-directory: android
-          script: bash -c 'set -uo pipefail; adb wait-for-device; adb install -r app/build/outputs/apk/debug/app-debug.apk || exit 1; adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk || exit 1; adb shell am instrument -w -e class id.jedasholat.app.UiSmokeTest id.jedasholat.app.test/androidx.test.runner.AndroidJUnitRunner 2>&1 | tee ui-test.log; adb pull /sdcard/Android/data/id.jedasholat.app/files/ui-screenshots ui-screenshots || true; if ! grep -q "OK (3 tests)" ui-test.log; then adb logcat -d > ui-logcat.txt || true; exit 1; fi'
+          script: bash -c 'set -uo pipefail; adb wait-for-device; adb install -r app/build/outputs/apk/debug/app-debug.apk || exit 1; adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk || exit 1; adb shell am instrument -w -e class id.jedasholat.app.UiSmokeTest id.jedasholat.app.test/androidx.test.runner.AndroidJUnitRunner 2>&1 | tee ui-test.log; adb exec-out run-as id.jedasholat.app tar -cf - -C files ui-screenshots > ui-screenshots.tar || true; tar -xf ui-screenshots.tar || true; adb shell run-as id.jedasholat.app ls -l files/ui-screenshots > ui-screenshot-list.txt || true; if ! grep -q "OK (3 tests)" ui-test.log; then adb logcat -d > ui-logcat.txt || true; exit 1; fi'
       - name: Surface UI diagnostics
         if: always()
         continue-on-error: true
@@ -150,6 +150,8 @@ jobs:
           if p.exists():
               for line in p.read_text(errors='replace').splitlines()[-40:]:
                   print('::error::UI ' + line.replace('%', '%25').replace('\n', '%0A'))
+          p = Path('ui-screenshot-list.txt')
+          if p.exists(): print('::error::SHOT_LIST ' + p.read_text(errors='replace').replace('%', '%25').replace('\n', '%0A'))
           p = Path('ui-logcat.txt')
           if p.exists():
               hits = [l for l in p.read_text(errors='replace').splitlines() if any(t in l for t in ('FATAL', 'AndroidRuntime', 'TestRunner', 'UiSmokeTest', 'AssertionError'))]
@@ -185,6 +187,7 @@ jobs:
           name: JedaSholat-UI-screenshots
           path: |
             android/ui-screenshots/
+            android/ui-screenshot-list.txt
             android/ui-test.log
             android/ui-build.log
             android/ui-logcat.txt

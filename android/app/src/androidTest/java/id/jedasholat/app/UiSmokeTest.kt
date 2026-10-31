@@ -73,7 +73,7 @@ class UiSmokeTest {
         compose.onNodeWithText("Durasi jeda").assertExists()
         compose.onNodeWithText("Lanjutkan").performClick()
         compose.onNodeWithText("Selesai & lihat beranda").performClick()
-        compose.onNodeWithText("Jadwal").assertExists()
+        compose.waitUntil(8_000) { compose.onAllNodesWithText("Jadwal").fetchSemanticsNodes().isNotEmpty() }
     }
 
     @Test fun largeFontKeepsNavigationReachable() {
@@ -89,7 +89,7 @@ class UiSmokeTest {
 
     private fun capture(name: String) {
         compose.waitForIdle()
-        val dir = File(context.getExternalFilesDir(null), "ui-screenshots").apply { mkdirs() }
+        val dir = File(context.filesDir, "ui-screenshots").apply { mkdirs() }
         assertTrue("Screenshot failed: $name", device.takeScreenshot(File(dir, "$name.png")))
     }
 }
