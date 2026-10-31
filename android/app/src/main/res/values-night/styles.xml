@@ -1,0 +1,12 @@
+<resources>
+    <style name="Theme.JedaSholat" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:statusBarColor">#101C19</item>
+        <item name="android:navigationBarColor">#101C19</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:colorAccent">#A9D8BF</item>
+        <item name="android:windowBackground">#101C19</item>
+    </style>
+</resources>

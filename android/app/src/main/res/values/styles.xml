@@ -2,9 +2,11 @@
     <style name="Theme.JedaSholat" parent="android:style/Theme.Material.Light.NoActionBar">
         <item name="android:fontFamily">sans</item>
         <item name="android:windowLightStatusBar">true</item>
-        <item name="android:statusBarColor">#F5F1E8</item>
-        <item name="android:navigationBarColor">#F5F1E8</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:statusBarColor">#F5F7F4</item>
+        <item name="android:navigationBarColor">#F5F7F4</item>
         <item name="android:windowActionModeOverlay">true</item>
-        <item name="android:colorAccent">#123F35</item>
+        <item name="android:colorAccent">#124D40</item>
+        <item name="android:windowBackground">#F5F7F4</item>
     </style>
 </resources>

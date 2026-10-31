@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 108 108">
+  <defs>
+    <linearGradient id="bg" x1="12" y1="8" x2="98" y2="104" gradientUnits="userSpaceOnUse"><stop stop-color="#1B6653"/><stop offset="1" stop-color="#0A382F"/></linearGradient>
+    <clipPath id="tile"><rect width="108" height="108" rx="25"/></clipPath>
+  </defs>
+  <g clip-path="url(#tile)">
+    <path fill="url(#bg)" d="M0 0h108v108H0z"/>
+    <path fill="#fff" opacity=".05" d="M84-12A66 66 0 1 0 84 120A54 54 0 1 1 84-12Z"/>
+    <path fill="#fff" opacity=".04" d="M99 8A49 49 0 1 0 99 106A40 40 0 1 1 99 8Z"/>
+    <g transform="translate(54 54) scale(.88) translate(-54 -54)">
+      <path fill="#F3F7F1" d="M59 27A29 29 0 1 0 79 72A25 25 0 0 1 59 27Z"/>
+      <rect fill="#D9B978" x="56" y="44" width="7" height="27" rx="3"/>
+      <rect fill="#D9B978" x="68" y="44" width="7" height="27" rx="3"/>
+      <path fill="#D9B978" d="M79 27l1.7 4.3L85 33l-4.3 1.7L79 39l-1.7-4.3L73 33l4.3-1.7Z"/>
+    </g>
+  </g>
+</svg>

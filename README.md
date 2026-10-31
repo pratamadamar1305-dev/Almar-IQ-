@@ -8,7 +8,8 @@ Jeda aplikasi pilihan saat jendela sholat, lalu buka kembali otomatis. Native Ko
 
 - Dokumentasi produk, build, privasi, dan batasan: [`docs/JedaSholat.md`](docs/JedaSholat.md)
 - Checklist uji perangkat/OEM: [`docs/DEVICE_TEST_CHECKLIST.md`](docs/DEVICE_TEST_CHECKLIST.md)
-- Debug APK: artefak `JedaSholat-debug` pada workflow **Build JedaSholat Android**.
+- Install dari web: https://pratamadamar1305-dev.github.io/Almar-IQ-/jedasholat/
+- Debug APK langsung: https://github.com/pratamadamar1305-dev/Almar-IQ-/releases/download/jedasholat-debug/JedaSholat-debug.apk
 - Pratinjau web: `cd preview && npm ci && npm run dev` (port 3001). Browser tidak memblokir aplikasi Android.
 
 ## 📱 DOJO TARUNG (aplikasi)

@@ -11,9 +11,10 @@ object AppCatalog {
     fun launchable(context: Context): List<InstalledApp> {
         val pm = context.packageManager
         val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        val safety = safetyPackages(context)
         return pm.queryIntentActivities(intent, 0).mapNotNull {
             val pkg = it.activityInfo.packageName
-            if (pkg == context.packageName || pkg in safetyPackages(context)) null else
+            if (pkg == context.packageName || pkg in safety) null else
                 runCatching { InstalledApp(pkg, it.loadLabel(pm).toString(), it.loadIcon(pm)) }.getOrNull()
         }.distinctBy { it.packageName }.sortedBy { it.label.lowercase() }
     }
