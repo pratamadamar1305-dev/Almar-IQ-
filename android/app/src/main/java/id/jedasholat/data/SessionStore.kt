@@ -17,6 +17,7 @@ interface SessionDao {
     @Query("SELECT * FROM sessions") suspend fun all(): List<SessionEntity>
     @Upsert suspend fun put(items: List<SessionEntity>)
     @Query("DELETE FROM sessions WHERE end < :cutoff") suspend fun prune(cutoff: Long)
+    @Query("DELETE FROM sessions WHERE status IN ('COMPLETED','CANCELLED','INTERRUPTED','MISSED')") suspend fun clearHistory()
     @Query("DELETE FROM sessions") suspend fun clear()
 }
 @Database(entities = [SessionEntity::class], version = 1, exportSchema = false)

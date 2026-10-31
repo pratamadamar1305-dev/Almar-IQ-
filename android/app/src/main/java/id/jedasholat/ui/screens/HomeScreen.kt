@@ -111,6 +111,7 @@ import java.util.Locale
                                 !s.protectionEnabled -> "Jadwal tetap bisa dilihat. Aktifkan perlindungan saat kamu siap."
                                 needsApps -> "Tidak ada aplikasi yang dipilih otomatis. Telepon dan akses darurat tetap aman."
                                 !state.capabilities.accessibility || !s.accessibilityConsent -> "Layar jeda membutuhkan izin Layanan Aksesibilitas. Isi layar dan pesan tidak dibaca."
+                                !state.capabilities.accessibilityBound -> "Izin tercatat aktif, tetapi layanan belum tersambung. Buka Pengaturan → Aksesibilitas → JedaSholat, lalu matikan dan nyalakan lagi."
                                 else -> "Periksa izin perlindungan di pengaturan."
                             }, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }

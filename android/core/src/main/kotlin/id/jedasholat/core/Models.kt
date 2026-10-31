@@ -77,4 +77,6 @@ data class Capabilities(
     val exactAlarms: Boolean = false,
     val notifications: Boolean = false,
     val usageAccess: Boolean = false,
+    /** True only while the accessibility service is actually bound, not just listed in Secure settings. */
+    val accessibilityBound: Boolean = false,
 )

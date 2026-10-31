@@ -18,6 +18,16 @@ object AppCatalog {
                 runCatching { InstalledApp(pkg, it.loadLabel(pm).toString(), it.loadIcon(pm)) }.getOrNull()
         }.distinctBy { it.packageName }.sortedBy { it.label.lowercase() }
     }
+    /** Package names only; used by the foreground classifier without loading icons/labels. */
+    fun launchablePackages(context: Context): Set<String> {
+        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        return context.packageManager.queryIntentActivities(intent, 0)
+            .map { it.activityInfo.packageName }.toSet()
+    }
+    fun imePackages(context: Context): Set<String> = runCatching {
+        context.getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+            .enabledInputMethodList.map { it.packageName }.toSet()
+    }.getOrDefault(emptySet())
     fun safetyPackages(context: Context): Set<String> {
         val pm = context.packageManager
         val result = mutableSetOf("android", "com.android.systemui", "com.android.settings",
