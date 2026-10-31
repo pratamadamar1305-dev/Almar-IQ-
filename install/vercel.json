@@ -1,8 +1,25 @@
 {
   "redirects": [
-    { "source": "/JedaSholat-debug.apk", "destination": "https://github.com/pratamadamar1305-dev/Almar-IQ-/releases/download/jedasholat-debug/JedaSholat-debug.apk", "statusCode": 302 }
+    {
+      "source": "/JedaSholat-debug.apk",
+      "destination": "https://github.com/pratamadamar1305-dev/Almar-IQ-/releases/download/jedasholat-debug/JedaSholat-debug.apk",
+      "statusCode": 302
+    },
+    {
+      "source": "/JedaSholat-debug.apk.sha256",
+      "destination": "https://github.com/pratamadamar1305-dev/Almar-IQ-/releases/download/jedasholat-debug/JedaSholat-debug.apk.sha256",
+      "statusCode": 302
+    }
   ],
   "headers": [
-    { "source": "/(.*)", "headers": [{ "key": "X-Content-Type-Options", "value": "nosniff" }] }
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
+    }
   ]
 }
