@@ -31,7 +31,7 @@ class SessionCoordinator(
         val normalized = old.map { if (it.status == SessionStatus.SCHEDULED && it.date in coveredDates && it.id !in ids)
             SessionEngine.cancel(it, "SCHEDULE_CHANGED") else it }
         val result = SessionEngine.reconcile(normalized, windows, now, settings.protectionEnabled,
-            settings.accessibilityConsent && capabilities.accessibility)
+            settings.accessibilityConsent && capabilities.accessibilityBound)
         dao.put(result.map { it.toEntity() })
         dao.prune(now - 90L * 86_400_000L)
         scheduler.schedule(result, windows, now)
@@ -57,11 +57,20 @@ class SessionCoordinator(
     suspend fun simulate(mode: Mode) = mutex.withLock {
         val settings = settingsRepository.settings.first()
         require(settings.selectedPackages.isNotEmpty()) { "Pilih minimal satu aplikasi dahulu." }
-        require(settings.protectionEnabled && settings.accessibilityConsent && PermissionReader.read(context).accessibility) {
+        val caps = PermissionReader.read(context)
+        require(settings.protectionEnabled && settings.accessibilityConsent && caps.accessibility) {
             "Aktifkan perlindungan dan izin aksesibilitas dahulu."
+        }
+        require(caps.accessibilityBound) {
+            "Izin aksesibilitas aktif, tetapi layanan belum tersambung. Buka Pengaturan Android → Aksesibilitas → JedaSholat, lalu matikan dan nyalakan lagi."
         }
         val now = System.currentTimeMillis()
         val date = Instant.ofEpochMilli(now).atZone(ZoneId.of(settings.zoneId)).toLocalDate().toString()
+        // Only one simulation may be live at a time; older SIM rows must not linger as ACTIVE.
+        val staleSim = dao.all().map { it.toDomain() }
+            .filter { it.id.startsWith("SIM:") && (it.status == SessionStatus.ACTIVE || it.status == SessionStatus.SNOOZED) }
+            .map { SessionEngine.cancel(it, "SIMULATION_REPLACED").toEntity() }
+        if (staleSim.isNotEmpty()) dao.put(staleSim)
         val s = Session("SIM:$now", date, Prayer.DZUHUR, now, now + 30_000L, mode, SessionStatus.ACTIVE)
         dao.put(listOf(s.toEntity()))
         reconcileUnlocked()
@@ -80,7 +89,7 @@ class SessionCoordinator(
         val now = System.currentTimeMillis()
         val caps = PermissionReader.read(context)
         val result = SessionEngine.reconcile(dao.all().map { it.toDomain() }, emptyList(), now,
-            settings.protectionEnabled, settings.accessibilityConsent && caps.accessibility)
+            settings.protectionEnabled, settings.accessibilityConsent && caps.accessibilityBound)
         dao.put(result.map { it.toEntity() })
         scheduler.schedule(result, windows(settings, now), now)
     }

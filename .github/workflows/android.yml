@@ -1,7 +1,7 @@
 name: Build JedaSholat Android
 on:
   push:
-    branches: ['arena/805bc1d8-almar-iq', 'arena/3bddf50f-almar-iq', main]
+    branches: ['arena/4b07b77a-almar-iq', 'arena/805bc1d8-almar-iq', 'arena/3bddf50f-almar-iq', main]
     paths: ['android/**', '.github/workflows/android.yml']
   workflow_dispatch:
 permissions:
@@ -215,7 +215,7 @@ jobs:
             gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "JedaSholat Debug" --notes "APK debug untuk install langsung di Android. Bukan rilis Play Store." --prerelease
           fi
           gh release upload "$TAG" JedaSholat-debug.apk JedaSholat-debug.apk.sha256 --clobber --repo "$GITHUB_REPOSITORY"
-          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --title "JedaSholat Debug 0.2.0" --notes "UI Ruang Jeda + ikon adaptive baru. APK debug untuk Android 10+, bukan rilis Play Store. Verifikasi pembatasan OEM tetap mengikuti docs/DEVICE_TEST_CHECKLIST.md."
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --title "JedaSholat Debug 0.2.1" --notes "Perbaikan enforcement 0.2.1: foreground sticky terhadap SystemUI/IME/overlay, ticker tetap jalan saat overlay tersembunyi, diagnosis layanan, dan fallback alarm tertunda. APK debug untuk Android 10+, bukan rilis Play Store. Verifikasi OEM tetap mengikuti docs/DEVICE_TEST_CHECKLIST.md."
 
   instrumented:
     # Advisory: accessibility binding on CI emulators is not yet reliable enough to gate the APK.

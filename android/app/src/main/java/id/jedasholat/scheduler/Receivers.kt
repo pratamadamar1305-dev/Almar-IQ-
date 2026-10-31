@@ -7,6 +7,7 @@ import id.jedasholat.app.JedaApplication
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
 import id.jedasholat.core.Prayer
+import id.jedasholat.core.SessionStatus
 
 class ScheduleReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -21,7 +22,7 @@ class ScheduleReceiver : BroadcastReceiver() {
                     val session = app.container.database.sessions().all().firstOrNull { it.id == id }
                     val settings = app.container.settings.settings.first()
                     val delta = (session?.start ?: 0L) - System.currentTimeMillis()
-                    if (session?.status == "SCHEDULED" && settings.protectionEnabled && settings.notifications && delta in -120_000L..31 * 60_000L) {
+                    if (session?.status == SessionStatus.SCHEDULED.name && settings.protectionEnabled && settings.notifications && delta in -120_000L..31 * 60_000L) {
                         Notifications.send(context, kind.hashCode(), "${Prayer.valueOf(session.prayer).label} segera tiba",
                             "Siapkan waktu untuk jeda. Aplikasi pilihanmu akan dibatasi sesuai jadwal.")
                     }

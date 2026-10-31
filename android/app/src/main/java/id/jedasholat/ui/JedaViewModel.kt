@@ -24,7 +24,7 @@ data class UiState(
 
     val next: PrayerWindow? get() = windows.firstOrNull { it.start > now }
     val active: List<Session> get() = SessionEngine.active(sessions, now)
-    val ready: Boolean get() = settings.protectionEnabled && settings.accessibilityConsent && capabilities.accessibility && settings.selectedPackages.isNotEmpty()
+    val ready: Boolean get() = settings.protectionEnabled && settings.accessibilityConsent && capabilities.accessibility && capabilities.accessibilityBound && settings.selectedPackages.isNotEmpty()
 }
 
 class JedaViewModel(app: Application) : AndroidViewModel(app) {
@@ -68,7 +68,7 @@ class JedaViewModel(app: Application) : AndroidViewModel(app) {
             .onFailure { message(it.message) }
     }
     fun deleteHistory() = viewModelScope.launch {
-        container.database.sessions().clear(); container.coordinator.reconcile(); message("Riwayat sesi dihapus.")
+        container.database.sessions().clearHistory(); container.coordinator.reconcile(); message("Riwayat sesi dihapus. Sesi aktif/terjadwal tidak dihapus.")
     }
     fun deleteAll() = viewModelScope.launch {
         container.settings.clear(); container.database.sessions().clear()

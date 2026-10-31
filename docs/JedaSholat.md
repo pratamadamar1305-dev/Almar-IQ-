@@ -7,7 +7,7 @@ JedaSholat membatasi **hanya aplikasi yang dipilih pengguna** selama jendela wak
 - `android/`: aplikasi native Kotlin + Jetpack Compose, `applicationId id.jedasholat.app`, minSdk 29, target/compileSdk 35.
 - `preview/`: pratinjau web interaktif untuk mencoba UI dan simulasi. Browser **tidak** memblokir aplikasi Android.
 - Proyek Dojo Tarung yang sudah ada di `app/` tidak diubah.
-- Versi 0.2.0 memakai arah desain **Ruang Jeda**: Plus Jakarta Sans bundled, kartu waktu sholat sebagai fokus, navigasi Material 3, tema terang/gelap, dan ikon adaptive crescent+pause dengan lapisan monokrom Android 13+.
+- Versi 0.2.1 memperbaiki enforcement: foreground sticky terhadap SystemUI/IME/recents/overlay sendiri, ticker tetap berjalan saat overlay tersembunyi, diagnosis layanan tersambung vs hanya tercatat aktif, dan rekonsiliasi fallback bila alarm OEM tertunda. Desain tetap **Ruang Jeda** dari 0.2.0.
 - Debug APK dihasilkan workflow **Build JedaSholat Android** dan dipublikasikan ke release bergulir `jedasholat-debug` setelah build dan smoke test UI lulus. Halaman install: `https://pratamadamar1305-dev.github.io/Almar-IQ-/jedasholat/`. APK debug bukan rilis Play Store dan belum ditandatangani dengan kunci rilis.
 - Job `ui` menjalankan `UiSmokeTest` pada emulator Android 15 dan mengunggah screenshot native. Job `instrumented` untuk enforcement tetap advisory.
 - Jangan menyamakan lulus build/unit test/UI test dengan lulus uji perangkat fisik. Lihat `docs/DEVICE_TEST_CHECKLIST.md`.
@@ -73,10 +73,10 @@ node tests/browser.mjs   # membutuhkan dev server dan Playwright Chromium
 
 ## Layanan Aksesibilitas dan privasi
 
-- Layanan hanya menerima `TYPE_WINDOW_STATE_CHANGED` dan nama paket. `canRetrieveWindowContent=false`, `isAccessibilityTool=false`; tidak membaca isi layar, pesan, ketikan, atau gesto.
+- Layanan menerima `TYPE_WINDOW_STATE_CHANGED`/`TYPE_WINDOWS_CHANGED` dan nama paket. SystemUI, IME, recents, dan overlay sendiri tidak menghapus aplikasi foreground terakhir; Settings/dialer/home/uninstall tetap menang. `canRetrieveWindowContent=false`, `isAccessibilityTool=false`; tidak membaca isi layar, pesan, ketikan, atau gesto.
 - Disclosure dan persetujuan eksplisit mendahului pembukaan Pengaturan Aksesibilitas. Menolak izin tetap memungkinkan penggunaan jadwal.
 - Paket sendiri, System UI/Settings/pemanggil izin/uninstall, default dialer/telepon/alarm/home, serta whitelist pengguna selalu diizinkan. Aplikasi tidak dipilih tidak pernah ditutup.
-- Overlay hanya tampil ketika aplikasi foreground yang dipilih terkena sesi aktif. Pada saat layanan baru tersambung, event perpindahan berikutnya dipakai; akses penggunaan opsional dengan persetujuan terpisah dapat mengenali aplikasi yang sudah terbuka.
+- Overlay hanya tampil ketika aplikasi foreground yang dipilih terkena sesi aktif. Ticker layanan tetap mengevaluasi sesi aktif walaupun overlay sedang tersembunyi, sehingga kembali dari notifikasi/recents/keyboard dapat memunculkan overlay lagi. Akses penggunaan opsional dengan persetujuan terpisah membantu mengenali aplikasi yang sudah terbuka dan polling foreground ringan. Halaman Pengaturan menyediakan **Salin diagnosis** lokal (paketforeground, keputusan, alasan sembunyi, error terakhir).
 - Tidak ada izin INTERNET, QUERY_ALL_PACKAGES, device admin, root, atau full-screen intent. Tidak ada akun, iklan, analytics, maupun backend.
 - DataStore/Room/SharedPreferences lokal; backup cloud dan device-transfer dikecualikan. Hapus riwayat dan reset data tersedia. Reset aplikasi tidak mencabut izin Android secara otomatis.
 - Sebelum distribusi publik, lengkapi kebijakan privasi, Data Safety, deklarasi Aksesibilitas di Play Console, dan video demo sesuai kebijakan Google Play saat itu.

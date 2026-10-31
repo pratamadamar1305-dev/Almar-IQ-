@@ -15,11 +15,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import id.jedasholat.core.*
+import id.jedasholat.domain.EnforcementDiagnostics
 import id.jedasholat.ui.*
 
 @Composable private fun ActionRow(icon: JedaGlyph, title: String, subtitle: String, onClick: () -> Unit, ok: Boolean? = null) {
@@ -38,6 +42,8 @@ import id.jedasholat.ui.*
 
 @Composable fun SettingsScreen(state: UiState, vm: JedaViewModel) {
     val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
+    val diagnostics by EnforcementDiagnostics.state.collectAsStateWithLifecycle()
     val s = state.settings
     var disclosure by remember { mutableStateOf(false) }
     var usageDisclosure by remember { mutableStateOf(false) }
@@ -80,8 +86,11 @@ import id.jedasholat.ui.*
         } }
         item { JedaCard {
             SectionTitle("Izin seperlunya", "Tidak ada akses isi layar, chat, kamera, atau mikrofon.")
-            ActionRow(JedaGlyph.SHIELD, "Layanan Aksesibilitas", if (state.capabilities.accessibility) "Aktif" else "Belum aktif · diperlukan untuk layar jeda",
-                { if (s.accessibilityConsent) open(Settings.ACTION_ACCESSIBILITY_SETTINGS) else disclosure = true }, state.capabilities.accessibility)
+            ActionRow(JedaGlyph.SHIELD, "Layanan Aksesibilitas", when {
+                state.capabilities.accessibilityBound -> "Aktif dan tersambung"
+                state.capabilities.accessibility -> "Diizinkan, tetapi layanan belum tersambung · buka lalu matikan/nyalakan lagi"
+                else -> "Belum aktif · diperlukan untuk layar jeda"
+            }, { if (s.accessibilityConsent) open(Settings.ACTION_ACCESSIBILITY_SETTINGS) else disclosure = true }, state.capabilities.accessibilityBound)
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             ActionRow(JedaGlyph.BELL, "Alarms & reminders", if (state.capabilities.exactAlarms) "Tersedia" else "Terbatas · Android dapat menunda jeda",
                 { open(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM) }, state.capabilities.exactAlarms)
@@ -90,6 +99,23 @@ import id.jedasholat.ui.*
             ActionRow(JedaGlyph.PAUSE, "Akses penggunaan opsional", if (state.capabilities.usageAccess) "Aktif" else "Opsional · mengenali aplikasi yang sudah terbuka",
                 { if (s.usageConsent) open(Settings.ACTION_USAGE_ACCESS_SETTINGS) else usageDisclosure = true }, state.capabilities.usageAccess)
             ActionRow(JedaGlyph.SETTINGS, "Pengaturan aplikasi Android", "Kelola izin, baterai, atau hapus aplikasi", { open(Settings.ACTION_APPLICATION_DETAILS_SETTINGS) })
+        } }
+        item { JedaCard(outlined = true) {
+            SectionTitle("Diagnosis perlindungan", "Lokal saja. Tidak membaca isi layar atau riwayat chat.")
+            Text(when {
+                diagnostics.serviceBound -> "Layanan tersambung. Overlay: ${if (diagnostics.overlayVisible) "tampil" else "tersembunyi"}."
+                diagnostics.enabledInSettings -> "Izin tercatat aktif, tetapi layanan belum tersambung. Matikan lalu nyalakan lagi izin JedaSholat di Aksesibilitas Android."
+                else -> "Layanan belum aktif."
+            }, style = MaterialTheme.typography.bodyMedium)
+            Text("Aplikasi terdeteksi: ${diagnostics.foreground.ifBlank { "belum ada" }}\nKeputusan terakhir: ${diagnostics.lastDecision.ifBlank { "belum ada" }}\nAlasan sembunyi: ${diagnostics.lastHideReason.ifBlank { "belum ada" }}",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (diagnostics.lastError.isNotBlank()) Text("Error terakhir: ${diagnostics.lastError}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            OutlinedButton(onClick = {
+                clipboard.setText(AnnotatedString(EnforcementDiagnostics.dump()))
+                vm.message("Diagnosis disalin. Tempel ke chat pengembang bila perlu.")
+            }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Salin diagnosis") }
+            Text("Jika layar jeda hilang sendiri di Nubia/ZTE: set baterai JedaSholat ke Unrestricted/Tanpa pembatasan, aktifkan autostart, kunci aplikasi di recents, matikan battery saver, dan coba tanpa Game Space. Akses penggunaan opsional membantu mengenali aplikasi yang sudah terbuka.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         } }
         item { JedaCard {
             SectionTitle("Lokasi & jadwal", "${s.locationLabel} · ${s.zoneId}") {
@@ -140,7 +166,7 @@ import id.jedasholat.ui.*
             SectionTitle("Data & privasi", "Tanpa akun, iklan, analytics, atau izin internet.")
             OutlinedButton(onClick = { confirm = "history" }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { JedaIcon(JedaGlyph.TRASH, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Hapus riwayat") }
             TextButton(onClick = { confirm = "all" }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp), colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("Hapus seluruh data lokal") }
-            Text("JedaSholat 0.2.0 · Android\nAdhan oleh Batoul Apps, lisensi MIT.\nPlus Jakarta Sans, lisensi SIL OFL.\nIzin aksesibilitas dapat dicabut kapan saja di Pengaturan Android.",
+            Text("JedaSholat 0.2.1 · Android\nAdhan oleh Batoul Apps, lisensi MIT.\nPlus Jakarta Sans, lisensi SIL OFL.\nIzin aksesibilitas dapat dicabut kapan saja di Pengaturan Android.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         } }
     }
