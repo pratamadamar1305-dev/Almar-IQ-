@@ -157,14 +157,27 @@ jobs:
               hits = [l for l in p.read_text(errors='replace').splitlines() if any(t in l for t in ('FATAL', 'AndroidRuntime', 'TestRunner', 'UiSmokeTest', 'AssertionError'))]
               for line in hits[-12:]:
                   print('::error::LOGCAT ' + line.replace('%', '%25').replace('\n', '%0A'))
-          tar = Path('ui-screenshots.tar')
-          if tar.exists() and tar.stat().st_size > 0:
-              import base64
-              b64 = base64.b64encode(tar.read_bytes()).decode()
-              chunks = [b64[i:i+50000] for i in range(0, len(b64), 50000)]
-              print('::error::EVIDENCE_META ' + json.dumps({'chunks': len(chunks), 'bytes': tar.stat().st_size}))
-              for i, chunk in enumerate(chunks):
-                  print('::error::EVIDENCE_CHUNK ' + str(i) + ' ' + chunk)
+          PY
+      - name: Store native UI screenshots on the feature branch
+        if: success() && startsWith(github.ref, 'refs/heads/arena/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import base64, json, os, subprocess
+          from pathlib import Path
+          repo = os.environ['GITHUB_REPOSITORY']
+          branch = os.environ['GITHUB_REF_NAME']
+          for file in sorted(Path('ui-screenshots').glob('*.png')):
+              target = f'docs/design/screenshots/{file.name}'
+              api = f'repos/{repo}/contents/{target}'
+              existing = subprocess.run(['gh', 'api', f'{api}?ref={branch}', '--jq', '.sha'], capture_output=True, text=True)
+              payload = {'message': f'Update native UI screenshot {file.name} [skip ci]', 'branch': branch,
+                         'content': base64.b64encode(file.read_bytes()).decode()}
+              if existing.returncode == 0 and existing.stdout.strip():
+                  payload['sha'] = existing.stdout.strip()
+              Path('/tmp/ui-shot-payload.json').write_text(json.dumps(payload))
+              subprocess.check_call(['gh', 'api', '-X', 'PUT', api, '--input', '/tmp/ui-shot-payload.json', '--jq', '.commit.sha'])
           PY
       - name: Upload UI evidence
         if: always()
