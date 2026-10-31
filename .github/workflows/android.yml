@@ -139,6 +139,25 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           working-directory: android
           script: bash -c 'set -uo pipefail; adb wait-for-device; adb install -r app/build/outputs/apk/debug/app-debug.apk || exit 1; adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk || exit 1; adb shell am instrument -w -e class id.jedasholat.app.UiSmokeTest id.jedasholat.app.test/androidx.test.runner.AndroidJUnitRunner 2>&1 | tee ui-test.log; adb pull /sdcard/Android/data/id.jedasholat.app/files/ui-screenshots ui-screenshots || true; if ! grep -q "OK (3 tests)" ui-test.log; then adb logcat -d > ui-logcat.txt || true; exit 1; fi'
+      - name: Surface UI diagnostics
+        if: always()
+        continue-on-error: true
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          for name in ('ui-build.log', 'ui-test.log'):
+              p = Path(name)
+              if p.exists():
+                  lines = p.read_text(errors='replace').splitlines()
+                  for line in lines[-160:]:
+                      print('::error::UI ' + name + ' ' + line.replace('%', '%25').replace('\n', '%0A'))
+          p = Path('ui-logcat.txt')
+          if p.exists():
+              for line in p.read_text(errors='replace').splitlines():
+                  if any(t in line for t in ('FATAL', 'AndroidRuntime', 'jedasholat', 'JedaService', 'UiSmokeTest', 'TestRunner')):
+                      print('::error::LOGCAT ' + line.replace('%', '%25').replace('\n', '%0A'))
+          print('screenshots:', [str(x) for x in Path('ui-screenshots').glob('*.png')] if Path('ui-screenshots').exists() else [])
+          PY
       - name: Upload UI evidence
         if: always()
         uses: actions/upload-artifact@v5
