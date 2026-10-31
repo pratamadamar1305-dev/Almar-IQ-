@@ -17,7 +17,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.graphics.vector.addPath
+import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import id.jedasholat.core.Prayer
@@ -63,7 +63,7 @@ private val paths = mapOf(
 
 fun jedaIcon(glyph: JedaGlyph): ImageVector = cache.getOrPut(glyph) {
     ImageVector.Builder(glyph.name, 24.dp, 24.dp, 24f, 24f).addPath(
-        pathData = paths.getValue(glyph), fill = null, stroke = SolidColor(Color.Black),
+        pathData = PathParser().parsePathString(paths.getValue(glyph)).toPath(), fill = null, stroke = SolidColor(Color.Black),
         strokeLineWidth = 1.8f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round,
     ).build()
 }

@@ -135,7 +135,7 @@ class JedaAccessibilityService : AccessibilityService() {
             val muted = Color.rgb(212, 231, 218)
             val semibold = runCatching { resources.getFont(R.font.plus_jakarta_sans_semibold) }.getOrDefault(Typeface.DEFAULT_BOLD)
             val regular = runCatching { resources.getFont(R.font.plus_jakarta_sans_regular) }.getOrDefault(Typeface.DEFAULT)
-            val background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(Color.rgb(22, 79, 65), Color.rgb(10, 47, 39)))
+            val overlayBackground = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(Color.rgb(22, 79, 65), Color.rgb(10, 47, 39)))
             val content = LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
                 setPadding(dp(28), dp(32), dp(28), dp(32))
@@ -187,7 +187,7 @@ class JedaAccessibilityService : AccessibilityService() {
             }
             content.addView(label(if (strict) "Mode Tegas bukan kunci permanen. Izin Android tetap dapat dicabut." else "Kamu tetap memegang kendali. Jeda selesai otomatis.", 12f, muted).apply { setPadding(0, dp(18), 0, 0) })
             val root = ScrollView(context).apply {
-                isFillViewport = true; this.background = background
+                isFillViewport = true; this.background = overlayBackground
                 addView(content, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
                 setOnApplyWindowInsetsListener { _, insets ->
                     val bars = if (android.os.Build.VERSION.SDK_INT >= 30) insets.getInsets(WindowInsets.Type.systemBars())

@@ -169,7 +169,7 @@ fun countdownCaption(end: Long, now: Long): String = if (end - now >= 3_600_000)
         dismissButton = { TextButton(onClick = { customDuration = false }) { Text("Batal") } })
 }
 
-@Composable fun SegmentedTabs(options: List<Pair<String, String>>, selected: String, onSelect: (String) -> Unit, modifier: Modifier = Modifier) {
+@Composable fun SegmentedTabs(options: List<Pair<String, String>>, selected: String, modifier: Modifier = Modifier, onSelect: (String) -> Unit) {
     Surface(modifier.fillMaxWidth(), shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.surfaceContainer,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
         Row(Modifier.padding(4.dp).selectableGroup(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
