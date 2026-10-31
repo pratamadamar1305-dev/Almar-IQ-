@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="theme-color" content="#123f35"/>
+<title>Install JedaSholat — Android</title>
+<meta name="description" content="Install JedaSholat langsung di Android. Jeda aplikasi pilihan saat waktu sholat, bukan kunci HP seharian."/>
+<link rel="icon" href="./favicon.svg" type="image/svg+xml"/>
+<style>
+:root{--green:#123f35;--green2:#1d5a4b;--cream:#f6f1e7;--gold:#c9a96a;--ink:#17251f;--muted:#5d6b63;--card:#fffdf8;--line:#e4dcc9}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--cream);color:var(--ink);line-height:1.55}
+.wrap{max-width:760px;margin:0 auto;padding:28px 20px 64px}
+header{display:flex;align-items:center;gap:12px;margin-bottom:28px}
+.logo{width:46px;height:46px;border-radius:14px;background:var(--green);display:grid;place-items:center;color:var(--gold);font-size:26px}
+h1{font-size:clamp(2rem,6vw,3.2rem);line-height:1.08;margin:.2em 0;color:var(--green)}
+h2{font-size:1.15rem;margin:0 0 10px}
+p{margin:.4em 0}.lead{font-size:1.08rem;color:var(--muted)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:22px;margin:18px 0;box-shadow:0 10px 30px rgba(18,63,53,.06)}
+.hero{background:linear-gradient(145deg,var(--green),var(--green2));color:#f7f3e8;border:none;padding:28px;border-radius:26px}
+.hero p{color:#d9e5dc}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:16px 18px;border-radius:16px;border:none;background:var(--gold);color:#203028;font-weight:800;font-size:1.05rem;text-decoration:none;cursor:pointer}
+.btn.secondary{background:transparent;color:var(--green);border:1.5px solid var(--green)}
+.btn:active{transform:scale(.99)}
+.steps{counter-reset:s;display:grid;gap:12px;margin-top:12px}
+.step{display:grid;grid-template-columns:34px 1fr;gap:12px;align-items:start}
+.step:before{counter-increment:s;content:counter(s);width:30px;height:30px;border-radius:50%;background:var(--green);color:#fff;display:grid;place-items:center;font-weight:700}
+.note{font-size:.92rem;color:var(--muted)}
+.pill{display:inline-block;padding:5px 10px;border-radius:999px;background:#e8f0e9;color:var(--green);font-size:.8rem;font-weight:700;margin-bottom:12px}
+ul{padding-left:20px;margin:8px 0}
+footer{margin-top:28px;font-size:.85rem;color:var(--muted)}
+code{background:#efe8d8;padding:2px 6px;border-radius:6px}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header><div class="logo">☾</div><div><strong>JedaSholat</strong><div class="note">Beri ruang untuk yang utama.</div></div></header>
+<section class="hero">
+<span class="pill">Android 10+</span>
+<h1>Install langsung dari web.</h1>
+<p>Tanpa Play Store. Tanpa login GitHub. Cukup unduh APK, pasang, lalu pilih aplikasi yang mau dijeda saat waktu sholat.</p>
+<p><a class="btn" id="installBtn" href="./JedaSholat.apk">⬇ Download &amp; Install APK</a></p>
+<p class="note" id="platformNote">Di iPhone? Buka halaman ini di HP Android.</p>
+</section>
+<section class="card">
+<h2>Cara pasang</h2>
+<div class="steps">
+<div class="step"><div><strong>Tap tombol download.</strong><br/><span class="note">Chrome akan mengunduh <code>JedaSholat-debug.apk</code>.</span></div></div>
+<div class="step"><div><strong>Buka file APK.</strong><br/><span class="note">Kalau diminta, izinkan “Install unknown apps” untuk Chrome/File Manager.</span></div></div>
+<div class="step"><div><strong>Install dan buka aplikasi.</strong><br/><span class="note">Pilih kota, pilih aplikasi, lalu aktifkan izin yang diminta.</span></div></div>
+<div class="step"><div><strong>Coba simulasi 30 detik.</strong><br/><span class="note">Pastikan layar jeda muncul sebelum memakai jadwal asli.</span></div></div>
+</div>
+</section>
+<section class="card">
+<h2>Penting</h2>
+<ul>
+<li>JedaSholat <strong>bukan PWA biasa</strong> seperti Dojo Tarung. Ia perlu APK native agar bisa memakai Layanan Aksesibilitas Android.</li>
+<li>Hanya aplikasi yang kamu pilih yang dibatasi. Telepon, darurat, Settings, dan layar utama tetap bisa diakses.</li>
+<li>Mode Tegas bukan anti-bypass. Izin Android tetap bisa dicabut kapan saja.</li>
+<li>Ini APK debug, bukan rilis Play Store. Sumbernya resmi dari repo JedaSholat.</li>
+</ul>
+<p><a class="btn secondary" href="https://github.com/pratamadamar1305-dev/Almar-IQ-/releases/tag/jedasholat-debug">Lihat rilis &amp; checksum</a></p>
+</section>
+<footer>JedaSholat · jadwal dihitung offline · bukan jadwal resmi Kemenag · tanpa akun/iklan/pelacakan.</footer>
+</div>
+<script>
+const ua=navigator.userAgent||'';
+const android=/Android/i.test(ua);
+const note=document.getElementById('platformNote');
+if(android){note.textContent='Perangkat Android terdeteksi. Tap tombol di atas, lalu buka file yang terunduh.';}
+else if(/iPhone|iPad|iPod/i.test(ua)){note.textContent='iOS belum didukung. Buka halaman ini di HP Android untuk install.';}
+else{note.textContent='Buka halaman ini di HP Android, atau scan/transfer link ke HP Android.';}
+</script>
+</body>
+</html>

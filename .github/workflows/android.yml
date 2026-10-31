@@ -5,7 +5,7 @@ on:
     paths: ['android/**', '.github/workflows/android.yml']
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
 concurrency:
   group: android-${{ github.ref }}
   cancel-in-progress: true
@@ -46,6 +46,19 @@ jobs:
           name: JedaSholat-debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+      - name: Publish direct APK release
+        if: steps.build.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG=jedasholat-debug
+          cp app/build/outputs/apk/debug/app-debug.apk JedaSholat-debug.apk
+          sha256sum JedaSholat-debug.apk > JedaSholat-debug.apk.sha256
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "JedaSholat Debug" --notes "APK debug untuk install langsung di Android. Bukan rilis Play Store." --prerelease
+          fi
+          gh release upload "$TAG" JedaSholat-debug.apk JedaSholat-debug.apk.sha256 --clobber --repo "$GITHUB_REPOSITORY"
       - name: Surface compiler diagnostics
         if: always()
         continue-on-error: true
