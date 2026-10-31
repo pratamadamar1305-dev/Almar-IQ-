@@ -2,6 +2,15 @@
 
 Kumpulan file pribadi + aplikasi latihan harian.
 
+## 🕌 JedaSholat (Android)
+
+Jeda aplikasi pilihan saat jendela sholat, lalu buka kembali otomatis. Native Kotlin + Jetpack Compose ada di [`android/`](android/); pratinjau web interaktif ada di [`preview/`](preview/). Proyek Dojo Tarung di bawah tetap terpisah.
+
+- Dokumentasi produk, build, privasi, dan batasan: [`docs/JedaSholat.md`](docs/JedaSholat.md)
+- Checklist uji perangkat/OEM: [`docs/DEVICE_TEST_CHECKLIST.md`](docs/DEVICE_TEST_CHECKLIST.md)
+- Debug APK: artefak `JedaSholat-debug` pada workflow **Build JedaSholat Android**.
+- Pratinjau web: `cd preview && npm ci && npm run dev` (port 3001). Browser tidak memblokir aplikasi Android.
+
 ## 📱 DOJO TARUNG (aplikasi)
 
 Aplikasi web mobile-first untuk menjalankan jadwal latihan

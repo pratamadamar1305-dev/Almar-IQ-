@@ -1,0 +1,200 @@
+name: Build JedaSholat Android
+on:
+  push:
+    branches: ['arena/3bddf50f-almar-iq']
+    paths: ['android/**', '.github/workflows/android.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Use preinstalled Android SDK
+        run: |
+          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Unit tests
+        id: tests
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          ./gradlew :core:test :app:testDebugUnitTest --no-daemon --console=plain 2>&1 | tee test-build.log
+      - name: Lint and debug APK
+        id: build
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          ./gradlew :app:lintDebug :app:assembleDebug --no-daemon --console=plain 2>&1 | tee app-build.log
+      - name: Upload debug APK
+        if: always() && steps.build.outcome == 'success'
+        uses: actions/upload-artifact@v5
+        with:
+          name: JedaSholat-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+      - name: Publish direct APK release
+        if: steps.build.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG=jedasholat-debug
+          cp app/build/outputs/apk/debug/app-debug.apk JedaSholat-debug.apk
+          sha256sum JedaSholat-debug.apk > JedaSholat-debug.apk.sha256
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "JedaSholat Debug" --notes "APK debug untuk install langsung di Android. Bukan rilis Play Store." --prerelease
+          fi
+          gh release upload "$TAG" JedaSholat-debug.apk JedaSholat-debug.apk.sha256 --clobber --repo "$GITHUB_REPOSITORY"
+      - name: Surface compiler diagnostics
+        if: always()
+        continue-on-error: true
+        run: |
+          mkdir -p app/build/reports core/build/reports
+          cp -f test-build.log app-build.log app/build/reports/ || true
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          for name in ('build-test-apks.log', 'install-testtarget.log', 'install-app.log', 'install-test.log', 'connected-test.log'):
+              p = Path(name)
+              if p.exists():
+                  lines = p.read_text(errors='replace').splitlines()
+                  for line in lines[-120:]:
+                      print('::error::TAIL ' + name + ' ' + line.replace('%', '%25').replace('\n', '%0A'))
+                  for line in lines:
+                      if any(t in line for t in ('e: file:', 'error:', 'FAILED', 'Exception', 'What went wrong', 'Execution failed', 'INSTALL_', 'Failure')):
+                          print('::error::' + line.replace('%', '%25').replace('\n', '%0A'))
+          for name in ('test-build.log', 'app-build.log'):
+              p = Path(name)
+              if p.exists():
+                  for line in p.read_text(errors='replace').splitlines():
+                      if any(token in line for token in ('e: file:', 'error:', 'FAILED', 'What went wrong', 'Execution failed', 'Error:')):
+                          print('::error::' + line.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A'))
+          for p in Path('.').glob('*/build/test-results/*/TEST-*.xml'):
+              root = ET.parse(p).getroot()
+              for case in root.iter('testcase'):
+                  for fail in list(case.iter('failure')) + list(case.iter('error')):
+                      message = case.get('name', '') + ' ' + fail.get('message', '') + '\n' + (fail.text or '')
+                      print('::error::' + message.replace('%', '%25').replace('\n', '%0A'))
+              system = root.find('system-out')
+              if system is not None and system.text:
+                  print(system.text)
+          PY
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: Android-reports
+          path: |
+            android/app/build/reports/
+            android/core/build/reports/
+            android/app/build/test-results/
+            android/core/build/test-results/
+          if-no-files-found: warn
+      - name: Report build status
+        if: always()
+        run: |
+          echo "tests=${{ steps.tests.outcome }} build=${{ steps.build.outcome }}"
+          if [ "${{ steps.tests.outcome }}" != "success" ] || [ "${{ steps.build.outcome }}" != "success" ]; then exit 1; fi
+
+  instrumented:
+    # Advisory: accessibility binding on CI emulators is not yet reliable enough to gate the APK.
+    continue-on-error: true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Build app and test APKs
+        run: |
+          set -o pipefail
+          ./gradlew :testtarget:assembleDebug :app:assembleDebug :app:assembleDebugAndroidTest --no-daemon --console=plain 2>&1 | tee build-test-apks.log
+      - name: Android 15 enforcement smoke test
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          cores: 2
+          ram-size: 2048
+          heap-size: 256
+          disable-animations: true
+          emulator-boot-timeout: 600
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          working-directory: android
+          script: bash -c 'set -o pipefail; pwd; adb wait-for-device; if ! adb install -r testtarget/build/outputs/apk/debug/testtarget-debug.apk 2>&1 | tee install-testtarget.log; then exit 1; fi; if ! adb install -r app/build/outputs/apk/debug/app-debug.apk 2>&1 | tee install-app.log; then exit 1; fi; if ! adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk 2>&1 | tee install-test.log; then exit 1; fi; adb shell am instrument -w -e class id.jedasholat.app.EnforcementSmokeTest id.jedasholat.app.test/androidx.test.runner.AndroidJUnitRunner 2>&1 | tee connected-test.log; if ! grep -q "OK (3 tests)" connected-test.log; then adb logcat -d > logcat.txt || true; adb shell uiautomator dump /sdcard/jeda-window.xml || true; adb pull /sdcard/jeda-window.xml window.xml || true; adb shell settings get secure enabled_accessibility_services > accessibility-setting.txt || true; adb shell dumpsys accessibility > accessibility-dump.txt || true; exit 1; fi'
+      - name: Surface emulator diagnostics
+        if: always()
+        continue-on-error: true
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          for p in Path('app/build/outputs/androidTest-results').glob('**/TEST-*.xml'):
+              for case in ET.parse(p).getroot().iter('testcase'):
+                  for fail in list(case.iter('failure')) + list(case.iter('error')):
+                      message = case.get('name', '') + ' ' + fail.get('message', '')
+                      print('::error::TEST ' + message.replace('%', '%25').replace('\n', '%0A'))
+          for name in ('build-test-apks.log', 'install-testtarget.log', 'install-app.log', 'install-test.log', 'connected-test.log'):
+              p = Path(name)
+              if p.exists():
+                  for line in p.read_text(errors='replace').splitlines():
+                      if any(t in line for t in ('e: file:', 'Success', 'Failure', 'INSTALL_', 'Tests run', 'OK (', 'FAILED', 'AssertionError', 'not bound', 'not enabled', 'Service', 'Process crashed', 'INSTRUMENTATION')):
+                          print('::error::LINE ' + name + ' ' + line.replace('%', '%25').replace('\n', '%0A'))
+          p = Path('accessibility-setting.txt')
+          if p.exists(): print('::error::ACCESSIBILITY_SETTING=' + p.read_text(errors='replace').replace('\n', '%0A'))
+          p = Path('accessibility-dump.txt')
+          if p.exists():
+              for line in p.read_text(errors='replace').splitlines():
+                  if 'jedasholat' in line or 'Jeda' in line:
+                      print('::error::DUMPSYS ' + line.replace('%', '%25').replace('\n', '%0A'))
+          p = Path('logcat.txt')
+          if p.exists():
+              for line in p.read_text(errors='replace').splitlines():
+                  if 'jedasholat' in line or 'JedaService' in line or 'FATAL' in line or 'AndroidRuntime' in line:
+                      print('::error::LOGCAT ' + line.replace('%', '%25').replace('\n', '%0A'))
+          PY
+      - name: Upload instrumented reports
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: Android-emulator-reports
+          path: |
+            android/app/build/reports/androidTests/
+            android/app/build/outputs/androidTest-results/
+            android/connected-test.log
+            android/build-test-apks.log
+            android/install-testtarget.log
+            android/install-app.log
+            android/install-test.log
+            android/logcat.txt
+            android/window.xml
+            android/accessibility-setting.txt
+            android/accessibility-dump.txt
+          if-no-files-found: warn

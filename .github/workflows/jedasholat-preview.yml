@@ -1,0 +1,36 @@
+name: Test JedaSholat preview
+on:
+  push:
+    paths: ['preview/**', '.github/workflows/jedasholat-preview.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: preview
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: preview/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - name: Browser interaction checks
+        run: |
+          npm run dev > vite.log 2>&1 &
+          echo $! > vite.pid
+          for i in $(seq 1 30); do curl -sf http://localhost:3001 > /dev/null && break; sleep 1; done
+          node tests/browser.mjs 2>&1 | tee browser-test.log || { sed "s/^/::error::/" browser-test.log; exit 1; }
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: JedaSholat-screenshots
+          path: preview/test-results/jeda-*.png
+          if-no-files-found: warn
