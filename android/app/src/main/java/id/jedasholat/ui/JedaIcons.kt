@@ -63,7 +63,7 @@ private val paths = mapOf(
 
 fun jedaIcon(glyph: JedaGlyph): ImageVector = cache.getOrPut(glyph) {
     ImageVector.Builder(glyph.name, 24.dp, 24.dp, 24f, 24f).addPath(
-        pathData = PathParser().parsePathString(paths.getValue(glyph)).toPath(), fill = null, stroke = SolidColor(Color.Black),
+        pathData = PathParser().parsePathString(paths.getValue(glyph)).toNodes(), fill = null, stroke = SolidColor(Color.Black),
         strokeLineWidth = 1.8f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round,
     ).build()
 }
