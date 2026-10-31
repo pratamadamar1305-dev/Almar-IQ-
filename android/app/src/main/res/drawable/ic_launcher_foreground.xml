@@ -1,0 +1,8 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <!-- Original crescent + pause mark. All meaningful geometry sits inside the 66dp adaptive safe zone. -->
+    <path android:fillColor="#F3F7F1" android:pathData="M59,27A29,29 0,1 0,79 72A25,25 0,0 1,59 27Z" />
+    <path android:fillColor="#D9B978" android:pathData="M56,47Q56,44 59,44H60Q63,44 63,47V68Q63,71 60,71H59Q56,71 56,68Z" />
+    <path android:fillColor="#D9B978" android:pathData="M68,47Q68,44 71,44H72Q75,44 75,47V68Q75,71 72,71H71Q68,71 68,68Z" />
+    <path android:fillColor="#D9B978" android:pathData="M79,27L80.7,31.3L85,33L80.7,34.7L79,39L77.3,34.7L73,33L77.3,31.3Z" />
+</vector>

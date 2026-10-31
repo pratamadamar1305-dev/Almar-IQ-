@@ -7,8 +7,10 @@ JedaSholat membatasi **hanya aplikasi yang dipilih pengguna** selama jendela wak
 - `android/`: aplikasi native Kotlin + Jetpack Compose, `applicationId id.jedasholat.app`, minSdk 29, target/compileSdk 35.
 - `preview/`: pratinjau web interaktif untuk mencoba UI dan simulasi. Browser **tidak** memblokir aplikasi Android.
 - Proyek Dojo Tarung yang sudah ada di `app/` tidak diubah.
-- Debug APK dihasilkan workflow **Build JedaSholat Android** sebagai artefak `JedaSholat-debug`. APK debug bukan rilis Play Store dan belum ditandatangani dengan kunci rilis.
-- Jangan menyamakan lulus build/unit test dengan lulus uji perangkat fisik. Lihat `docs/DEVICE_TEST_CHECKLIST.md`.
+- Versi 0.2.0 memakai arah desain **Ruang Jeda**: Plus Jakarta Sans bundled, kartu waktu sholat sebagai fokus, navigasi Material 3, tema terang/gelap, dan ikon adaptive crescent+pause dengan lapisan monokrom Android 13+.
+- Debug APK dihasilkan workflow **Build JedaSholat Android** dan dipublikasikan ke release bergulir `jedasholat-debug` setelah build dan smoke test UI lulus. Halaman install: `https://pratamadamar1305-dev.github.io/Almar-IQ-/jedasholat/`. APK debug bukan rilis Play Store dan belum ditandatangani dengan kunci rilis.
+- Job `ui` menjalankan `UiSmokeTest` pada emulator Android 15 dan mengunggah screenshot native. Job `instrumented` untuk enforcement tetap advisory.
+- Jangan menyamakan lulus build/unit test/UI test dengan lulus uji perangkat fisik. Lihat `docs/DEVICE_TEST_CHECKLIST.md`.
 
 ## Menjalankan dan membuild
 
