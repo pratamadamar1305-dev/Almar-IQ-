@@ -1,8 +1,8 @@
-name: Deploy DOJO TARUNG (PWA)
+name: Deploy DOJO TARUNG + JedaSholat install
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'arena/3bddf50f-almar-iq']
   workflow_dispatch:
 
 permissions:
@@ -93,6 +93,18 @@ jobs:
         working-directory: app
         run: npm test
 
+      - name: Add JedaSholat web installer
+        if: ${{ hashFiles('install/index.html') != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p app/dist/jedasholat
+          cp install/index.html install/favicon.svg app/dist/jedasholat/
+          gh release download jedasholat-debug --repo "$GITHUB_REPOSITORY" --pattern 'JedaSholat-debug.apk' --pattern 'JedaSholat-debug.apk.sha256' --dir app/dist/jedasholat --clobber
+          test -s app/dist/jedasholat/JedaSholat-debug.apk
+          test -s app/dist/jedasholat/JedaSholat-debug.apk.sha256
+
       - uses: actions/configure-pages@v5
 
       - uses: actions/upload-pages-artifact@v3
@@ -111,4 +123,6 @@ jobs:
         uses: actions/deploy-pages@v4
 
       - name: Tampilkan URL
-        run: echo "🚀 Live di ${{ steps.deployment.outputs.page_url }}"
+        run: |
+          echo "🚀 Dojo Tarung: ${{ steps.deployment.outputs.page_url }}"
+          echo "🕌 JedaSholat install: ${{ steps.deployment.outputs.page_url }}jedasholat/"
