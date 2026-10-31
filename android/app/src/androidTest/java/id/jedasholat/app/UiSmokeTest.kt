@@ -54,6 +54,7 @@ class UiSmokeTest {
         compose.onNodeWithText("Pengaturan").performClick()
         compose.onNodeWithText("Perlindungan aplikasi").assertExists()
         capture("settings")
+        compose.onNode(hasScrollAction()).performScrollToNode(hasText("Gelap"))
         compose.onNodeWithText("Gelap").performClick()
         compose.waitForIdle()
         compose.onNodeWithText("Beranda").performClick()
