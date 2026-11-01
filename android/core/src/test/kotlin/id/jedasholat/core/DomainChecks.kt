@@ -63,6 +63,66 @@ object DomainChecks {
         check("invalid longitude rejected") { require(runCatching { settings.copy(longitude = Double.NaN) }.isFailure) }
         check("session id stable") { require(window.id == strict.id) }
         check("two sessions do not duplicate") { val result = SessionEngine.reconcile(listOf(strict, strict), listOf(window, window), start, true, true); require(result.size == 1) }
+
+        // 0.3.0 regressions: schedule re-enable, enforcing vs snoozed, and alarm registry planning.
+        check("schedule-changed cancellation can be re-enabled before end") {
+            val cancelled = strict.copy(status = SessionStatus.CANCELLED, reason = "SCHEDULE_CHANGED")
+            val result = SessionEngine.reconcile(listOf(cancelled), listOf(window), start - 1000, true, true).single()
+            require(result.status == SessionStatus.SCHEDULED)
+        }
+        check("schedule-changed cancellation re-enabled mid-window becomes active") {
+            val cancelled = strict.copy(status = SessionStatus.CANCELLED, reason = "SCHEDULE_CHANGED")
+            val result = SessionEngine.reconcile(listOf(cancelled), listOf(window), start + 1000, true, true).single()
+            require(result.status == SessionStatus.ACTIVE && result.end == end)
+        }
+        check("user-stopped cancellation is not resurrected") {
+            val cancelled = strict.copy(status = SessionStatus.CANCELLED, reason = "USER_STOPPED")
+            val result = SessionEngine.reconcile(listOf(cancelled), listOf(window), start - 1000, true, true).single()
+            require(result.status == SessionStatus.CANCELLED)
+        }
+        check("re-enable after end does not relock") {
+            val cancelled = strict.copy(status = SessionStatus.CANCELLED, reason = "SCHEDULE_CHANGED")
+            require(SessionEngine.reconcile(listOf(cancelled), listOf(window), end + 1, true, true).single().status == SessionStatus.CANCELLED)
+        }
+        check("snoozed session is not enforcing before boundary") {
+            val s = SessionEngine.snooze(reminder, start)
+            require(SessionEngine.enforcing(listOf(s), start + 1000).isEmpty())
+        }
+        check("snoozed session enforces at boundary") {
+            val s = SessionEngine.snooze(reminder, start)
+            require(SessionEngine.enforcing(listOf(s), start + 300_000).single().id == s.id)
+        }
+        check("active session is enforcing") { require(SessionEngine.enforcing(listOf(strict), start).single().id == strict.id) }
+        check("scheduled session is not enforcing") { require(SessionEngine.enforcing(listOf(strict.copy(status = SessionStatus.SCHEDULED)), start).isEmpty()) }
+
+        val other = strict.copy(id = "2026-10-30:ASHAR", prayer = Prayer.ASHAR)
+        check("alarm kinds are per-session at equal timestamps") {
+            val events = AlarmPlanner.plan(listOf(strict, other), emptyList(), start - 1000)
+            val keys = events.map { it.key }
+            require(keys.size == keys.toSet().size)
+            require(keys.any { it.endsWith("|START:${strict.id}") } && keys.any { it.endsWith("|START:${other.id}") })
+            require(keys.any { it.endsWith("|END:${strict.id}") } && keys.any { it.endsWith("|END:${other.id}") })
+        }
+        check("alarm planner includes snooze boundary") {
+            val s = SessionEngine.snooze(reminder, start)
+            val events = AlarmPlanner.plan(listOf(s), emptyList(), start)
+            require(events.any { it.kind == "SNOOZE_END:${s.id}" && it.time == start + 300_000 })
+        }
+        check("alarm planner includes scheduled pre-reminder") {
+            val scheduled = strict.copy(status = SessionStatus.SCHEDULED)
+            val events = AlarmPlanner.plan(listOf(scheduled), listOf(window), start - 10 * 60_000L)
+            require(events.any { it.kind == "REMIND:${window.id}:${window.start}" && it.time == start - 5 * 60_000L })
+        }
+        check("alarm planner skips terminal sessions and past events") {
+            val events = AlarmPlanner.plan(listOf(strict.copy(status = SessionStatus.COMPLETED), strict), emptyList(), end)
+            require(events.isEmpty())
+        }
+        check("alarm planner caps registry deterministically") {
+            val many = (0 until 80).map { i -> strict.copy(id = "s$i", start = start + i * 1000L, end = end + i * 1000L, status = SessionStatus.SCHEDULED) }
+            val events = AlarmPlanner.plan(many, emptyList(), start - 1, maxEvents = 96)
+            require(events.size == 96)
+            require(events == events.sortedWith(compareBy({ it.time }, { it.kind })))
+        }
         return count
     }
 }

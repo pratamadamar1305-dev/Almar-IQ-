@@ -40,3 +40,12 @@ Compose/Android resources are compiled and linted in CI. Native UI smoke tests c
 - The advisory `instrumented` enforcement job still fails on the CI emulator because AccessibilityService binding is unreliable there. This is not counted as device verification.
 - Native emulator screenshots are stored in `docs/design/screenshots/`: home light/dark, onboarding, expanded schedule, apps, settings, and 1.3× font scale.
 - Release asset `JedaSholat-debug.apk` was updated to 0.2.0 (28,880,789 bytes) with a matching `.sha256`.
+
+
+## 0.3.0 — status yang lebih jujur, beranda yang lebih tenang
+
+- Palet hero sekarang mengikuti terang/gelap melalui `LocalJedaHeroColors`, bukan hijau/krem tetap di semua tema.
+- Beranda memakai ring hitung mundur, status berjalan/ditunda/berikutnya, aksi cepat, ringkasan hari ini, dan timeline jadwal dengan status per sholat.
+- Daftar aplikasi memiliki state memuat yang eksplisit dan tombol segarkan yang tidak bisa dipukul berulang saat loading.
+- Status Perlindungan tetap membedakan izin tercatat aktif vs layanan benar-benar tersambung; simulasi menolak bila layanan belum bound.
+- Tetap memakai Plus Jakarta Sans, ikon stroke original, target sentuh >=48dp, dan label navigasi selalu terlihat.

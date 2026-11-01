@@ -76,7 +76,13 @@ import id.jedasholat.ui.*
                 JedaIcon(JedaGlyph.SHIELD, modifier = Modifier.size(28.dp), tint = MaterialTheme.colorScheme.primary)
                 Column(Modifier.weight(1f)) {
                     Text("Perlindungan aplikasi", style = MaterialTheme.typography.titleMedium)
-                    Text(if (s.protectionEnabled) "Aktif sesuai jadwal" else "Sedang dimatikan", style = MaterialTheme.typography.bodySmall)
+                    Text(when {
+                        !s.protectionEnabled -> "Sedang dimatikan"
+                        state.ready -> "Siap melindungi aplikasi pilihan"
+                        s.selectedPackages.isEmpty() -> "Aktif, tetapi belum ada aplikasi dipilih"
+                        !state.capabilities.accessibilityBound -> "Aktif, tetapi layanan belum tersambung"
+                        else -> "Aktif, periksa izin yang diperlukan"
+                    }, style = MaterialTheme.typography.bodySmall)
                 }
                 Switch(s.protectionEnabled, { enabled -> if (enabled) vm.update { it.copy(protectionEnabled = true, onboardingCompleted = true) } else confirm = "stop" },
                     modifier = Modifier.semantics { contentDescription = "Perlindungan aplikasi" })
@@ -166,7 +172,7 @@ import id.jedasholat.ui.*
             SectionTitle("Data & privasi", "Tanpa akun, iklan, analytics, atau izin internet.")
             OutlinedButton(onClick = { confirm = "history" }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { JedaIcon(JedaGlyph.TRASH, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Hapus riwayat") }
             TextButton(onClick = { confirm = "all" }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp), colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("Hapus seluruh data lokal") }
-            Text("JedaSholat 0.2.1 · Android\nAdhan oleh Batoul Apps, lisensi MIT.\nPlus Jakarta Sans, lisensi SIL OFL.\nIzin aksesibilitas dapat dicabut kapan saja di Pengaturan Android.",
+            Text("JedaSholat 0.3.0 · Android\nAdhan oleh Batoul Apps, lisensi MIT.\nPlus Jakarta Sans, lisensi SIL OFL.\nIzin aksesibilitas dapat dicabut kapan saja di Pengaturan Android.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         } }
     }

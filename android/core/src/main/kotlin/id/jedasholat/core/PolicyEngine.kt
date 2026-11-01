@@ -15,13 +15,7 @@ object PolicyEngine {
             packageName in settings.whitelistPackages || packageName !in settings.selectedPackages ||
             !settings.protectionEnabled || !settings.accessibilityConsent
         ) return Decision.Allow
-        val active = SessionEngine.active(sessions, now).filter { session ->
-            when (session.status) {
-                SessionStatus.ACTIVE -> true
-                SessionStatus.SNOOZED -> now >= (session.snoozedUntil ?: Long.MAX_VALUE)
-                else -> false
-            }
-        }
+        val active = SessionEngine.enforcing(sessions, now)
         // Safety > whitelist > unselected > strict > reminder. Strict wins overlapping reminders.
         val strict = active.filter { it.mode == Mode.TEGAS }.maxByOrNull { it.end }
         if (strict != null) return Decision.Block(strict)

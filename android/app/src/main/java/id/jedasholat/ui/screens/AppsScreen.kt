@@ -58,10 +58,19 @@ import id.jedasholat.ui.*
         item {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text("${filtered.size} aplikasi", Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                IconButton(onClick = vm::refresh) { JedaIcon(JedaGlyph.REFRESH, "Segarkan daftar aplikasi", Modifier.size(19.dp)) }
+                if (state.appsLoading) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                IconButton(onClick = vm::refresh, enabled = !state.appsLoading) { JedaIcon(JedaGlyph.REFRESH, "Segarkan daftar aplikasi", Modifier.size(19.dp)) }
             }
         }
-        if (filtered.isEmpty()) item {
+        if (state.appsLoading && state.apps.isEmpty()) item {
+            JedaCard(outlined = true) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
+                    Text("Membaca aplikasi terpasang…", style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+        }
+        if (!state.appsLoading && filtered.isEmpty()) item {
             EmptyState(JedaGlyph.SEARCH, if (query.isBlank()) "Belum ada aplikasi" else "Tidak ada yang cocok",
                 if (query.isBlank()) "Segarkan daftar untuk membaca aplikasi yang terpasang." else "Coba nama lain atau hapus pencarian.",
                 if (query.isBlank()) "Segarkan daftar" else "Hapus pencarian",

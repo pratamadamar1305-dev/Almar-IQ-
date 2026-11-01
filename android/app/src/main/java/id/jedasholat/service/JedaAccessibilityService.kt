@@ -66,6 +66,7 @@ class JedaAccessibilityService : AccessibilityService() {
     private var safety = emptySet<String>()
     private var classifier = ForegroundClassifier("", "")
     private val dismissed = mutableSetOf<String>()
+    private val dismissedPrefs by lazy { getSharedPreferences("jeda_dismissed_reminders", MODE_PRIVATE) }
     private var lastClassifierRefresh = 0L
     private var lastReconcile = 0L
     private var lastUsagePoll = 0L
@@ -92,6 +93,7 @@ class JedaAccessibilityService : AccessibilityService() {
         EnforcementDiagnostics.update { it.copy(serviceBound = true, lastError = "") }
         EnforcementDiagnostics.note("service connected")
         refreshClassifier()
+        loadDismissed()
         startTicker()
         scope.launch {
             settings = container.settings.settings.first()
@@ -102,6 +104,7 @@ class JedaAccessibilityService : AccessibilityService() {
                 s to rows.map { it.toDomain() }
             }.collect { (s, rows) ->
                 settings = s; sessions = rows
+                pruneDismissed()
                 evaluate()
             }
         }
@@ -238,6 +241,27 @@ class JedaAccessibilityService : AccessibilityService() {
         }
     }
 
+    private fun loadDismissed() {
+        dismissed.clear()
+        dismissed.addAll(dismissedPrefs.getStringSet("ids", emptySet()).orEmpty())
+        // Do not prune before the first session snapshot arrives; an empty list is not proof
+        // that a persisted dismissal is stale.
+    }
+
+    private fun dismissReminder(id: String) {
+        dismissed.add(id)
+        dismissedPrefs.edit().putStringSet("ids", dismissed.toSet()).apply()
+    }
+
+    /** Keep only dismissals that can still belong to a live session; old ids must not accumulate forever. */
+    private fun pruneDismissed() {
+        val now = System.currentTimeMillis()
+        val live = sessions.filter { it.end > now }.map { it.id }.toSet()
+        val before = dismissed.size
+        dismissed.retainAll(live)
+        if (dismissed.size != before) dismissedPrefs.edit().putStringSet("ids", dismissed.toSet()).apply()
+    }
+
     private fun recordError(where: String, error: Throwable) {
         android.util.Log.e("JedaService", where, error)
         EnforcementDiagnostics.update { it.copy(lastError = "$where: ${error.javaClass.simpleName}: ${error.message}") }
@@ -249,7 +273,7 @@ class JedaAccessibilityService : AccessibilityService() {
         val locked = getSystemService(KeyguardManager::class.java).isKeyguardLocked
         val audio = getSystemService(AudioManager::class.java)
         val inCall = audio.mode == AudioManager.MODE_IN_CALL || audio.mode == AudioManager.MODE_IN_COMMUNICATION
-        val active = SessionEngine.active(sessions, now)
+        val active = SessionEngine.enforcing(sessions, now)
         val decision = if (locked || inCall || !settings.accessibilityConsent) Decision.Allow else PolicyEngine.decide(
             foreground, packageName, safety, settings, sessions, now, dismissed)
         val decisionLabel = when (decision) {
@@ -346,7 +370,7 @@ class JedaAccessibilityService : AccessibilityService() {
             if (!strict) {
                 action(if (!session.snoozeUsed) "Tunda 5 menit (1×)" else "Lanjut tanpa pengingat", false) {
                     if (!session.snoozeUsed) scope.launch { runCatching { container.coordinator.snooze(session.id) } }
-                    else { dismissed.add(session.id); hide("reminder_dismissed"); evaluate() }
+                    else { dismissReminder(session.id); hide("reminder_dismissed"); evaluate() }
                 }
             }
             action("Kembali ke layar utama", true) { hide("user_home"); performGlobalAction(GLOBAL_ACTION_HOME) }
