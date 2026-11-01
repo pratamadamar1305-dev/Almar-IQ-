@@ -16,6 +16,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -26,6 +27,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import id.jedasholat.core.*
 import java.time.Instant
@@ -209,11 +211,45 @@ fun countdownCaption(end: Long, now: Long): String = if (end - now >= 3_600_000)
     }
 }
 
+/** Quiet countdown ring. Progress is 0f..1f of the current window remaining. */
+@Composable fun CountdownRing(
+    progress: Float,
+    modifier: Modifier = Modifier,
+    strokeWidth: Dp = 8.dp,
+    trackColor: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    progressColor: Color = MaterialTheme.colorScheme.primary,
+    content: @Composable BoxScope.() -> Unit,
+) {
+    Box(modifier, contentAlignment = Alignment.Center) {
+        Canvas(Modifier.matchParentSize()) {
+            val stroke = strokeWidth.toPx()
+            val inset = stroke / 2f
+            val arcSize = Size(size.width - stroke, size.height - stroke)
+            drawArc(trackColor, 0f, 360f, false, topLeft = Offset(inset, inset), size = arcSize,
+                style = Stroke(stroke, cap = StrokeCap.Round))
+            drawArc(progressColor, -90f, 360f * progress.coerceIn(0f, 1f), false, topLeft = Offset(inset, inset), size = arcSize,
+                style = Stroke(stroke, cap = StrokeCap.Round))
+        }
+        content()
+    }
+}
+
+@Composable fun StatTile(label: String, value: String, icon: JedaGlyph, modifier: Modifier = Modifier) {
+    Surface(modifier, shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            JedaIcon(icon, modifier = Modifier.size(19.dp), tint = MaterialTheme.colorScheme.primary)
+            Text(value, style = MaterialTheme.typography.titleLarge, maxLines = 1)
+            Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
 /** Quiet architectural line art: a dome, a doorway and a crescent. Decorative only. */
 @Composable fun HeroArt(modifier: Modifier = Modifier) {
+    val hero = LocalJedaHero.current
     Canvas(modifier) {
         val sx = size.width / 180f; val sy = size.height / 210f
-        val line = Color.White.copy(alpha = 0.13f)
+        val line = hero.artLine
         val dome = Path().apply {
             moveTo(20f * sx, 205f * sy); lineTo(20f * sx, 120f * sy)
             cubicTo(20f * sx, 78f * sy, 90f * sx, 68f * sy, 90f * sx, 28f * sy)
@@ -229,8 +265,8 @@ fun countdownCaption(end: Long, now: Long): String = if (end - now >= 3_600_000)
         }
         drawPath(door, line, style = Stroke(1.2f * sx))
         drawLine(line, Offset(8f * sx, 205f * sy), Offset(172f * sx, 205f * sy), 1.2f * sx)
-        drawCircle(Gold.copy(alpha = 0.75f), 13f * sx, Offset(140f * sx, 35f * sy))
-        drawCircle(Color(0xFF164F41), 12f * sx, Offset(146f * sx, 30f * sy))
-        drawCircle(Gold.copy(alpha = 0.7f), 1.8f * sx, Offset(45f * sx, 52f * sy))
+        drawCircle(hero.accent.copy(alpha = 0.75f), 13f * sx, Offset(140f * sx, 35f * sy))
+        drawCircle(hero.artMoon, 12f * sx, Offset(146f * sx, 30f * sy))
+        drawCircle(hero.accent.copy(alpha = 0.7f), 1.8f * sx, Offset(45f * sx, 52f * sy))
     }
 }

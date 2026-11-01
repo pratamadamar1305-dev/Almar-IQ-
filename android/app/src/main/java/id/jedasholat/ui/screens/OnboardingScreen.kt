@@ -43,8 +43,8 @@ import id.jedasholat.ui.*
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(vertical = 20.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
             when (step) {
                 0 -> {
-                    Surface(shape = MaterialTheme.shapes.large, color = Green, modifier = Modifier.size(96.dp)) {
-                        Box(contentAlignment = Alignment.Center) { JedaMark(82.dp) }
+                    Surface(shape = MaterialTheme.shapes.large, color = LocalJedaHero.current.background, modifier = Modifier.size(96.dp)) {
+                        Box(contentAlignment = Alignment.Center) { JedaMark(82.dp, crescent = LocalJedaHero.current.onBackground, bars = LocalJedaHero.current.accent) }
                     }
                     Text("Beri ruang\nuntuk yang utama.", style = MaterialTheme.typography.displaySmall)
                     Text("Jeda aplikasi pilihanmu saat waktu sholat. Di luar itu, HP tetap bebas digunakan.", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)

@@ -36,9 +36,17 @@ import java.util.Locale
             SegmentedTabs(listOf("-1" to "Kemarin", "0" to "Hari ini", "1" to "Besok"), day.toString()) { day = it.toInt() }
         }
         item {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(date.format(DateTimeFormatter.ofPattern("EEEE, d MMMM", Locale("id", "ID"))), style = MaterialTheme.typography.titleSmall)
-                Text(state.settings.zoneId, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            JedaCard(outlined = true) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    JedaIcon(JedaGlyph.PIN, tint = MaterialTheme.colorScheme.primary)
+                    Column(Modifier.weight(1f)) {
+                        Text(date.format(DateTimeFormatter.ofPattern("EEEE, d MMMM", Locale("id", "ID"))), style = MaterialTheme.typography.titleSmall)
+                        Text("${state.settings.locationLabel} · ${state.settings.zoneId}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    val enabled = state.settings.rules.values.count { it.enabled }
+                    val minutes = state.settings.rules.values.filter { it.enabled }.sumOf { it.durationMinutes }
+                    Pill("$enabled jendela · $minutes m")
+                }
             }
         }
         if (calculation.isFailure) item {

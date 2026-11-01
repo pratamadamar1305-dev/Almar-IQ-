@@ -30,7 +30,10 @@ object LocationReader {
                 val listener = android.location.LocationListener { location ->
                     if (continuation.isActive) continuation.resume(location?.let { it.latitude to it.longitude })
                 }
-                continuation.invokeOnCancellation { signal.cancel() }
+                continuation.invokeOnCancellation {
+                    signal.cancel()
+                    if (Build.VERSION.SDK_INT < 30) runCatching { manager.removeUpdates(listener) }
+                }
                 runCatching {
                     if (Build.VERSION.SDK_INT >= 30) {
                         manager.getCurrentLocation(provider, signal, context.mainExecutor) { location ->
@@ -39,9 +42,11 @@ object LocationReader {
                     } else {
                         @Suppress("DEPRECATION")
                         manager.requestSingleUpdate(provider, listener, Looper.getMainLooper())
-                        continuation.invokeOnCancellation { runCatching { manager.removeUpdates(listener) } }
                     }
-                }.onFailure { if (continuation.isActive) continuation.resume(null) }
+                }.onFailure {
+                    if (Build.VERSION.SDK_INT < 30) runCatching { manager.removeUpdates(listener) }
+                    if (continuation.isActive) continuation.resume(null)
+                }
             }
         }
     }

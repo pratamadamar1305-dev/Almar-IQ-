@@ -46,7 +46,8 @@ object AppCatalog {
         return result
     }
     fun cleanSelection(context: Context, settings: Settings): Settings {
-        val installed = launchable(context).map { it.packageName }.toSet()
+        // Package names only: pruning must not load every launcher icon on the main thread.
+        val installed = launchablePackages(context)
         return settings.copy(selectedPackages = settings.selectedPackages intersect installed,
             whitelistPackages = settings.whitelistPackages intersect installed)
     }

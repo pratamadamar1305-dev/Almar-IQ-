@@ -70,6 +70,13 @@ data class Session(
 ) {
     fun isActiveAt(now: Long): Boolean =
         (status == SessionStatus.ACTIVE || status == SessionStatus.SNOOZED) && now >= start && now < end
+
+    /** True only while the overlay policy should actually be enforced (a snoozed reminder is not enforcing). */
+    fun isEnforcingAt(now: Long): Boolean = when (status) {
+        SessionStatus.ACTIVE -> now >= start && now < end
+        SessionStatus.SNOOZED -> now >= (snoozedUntil ?: Long.MAX_VALUE) && now < end
+        else -> false
+    }
 }
 
 data class Capabilities(

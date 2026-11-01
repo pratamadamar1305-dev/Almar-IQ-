@@ -9,7 +9,11 @@ object SessionEngine {
         val byId = persisted.associateBy { it.id }.toMutableMap()
         for (window in windows) {
             val old = byId[window.id]
-            if (old == null) {
+            // A prayer disabled by a schedule change may be re-enabled before its window ends.
+            // Only SCHEDULE_CHANGED cancellations are resurrected; an explicit user stop stays stopped.
+            val resurrect = old != null && old.status == SessionStatus.CANCELLED &&
+                old.reason == "SCHEDULE_CHANGED" && window.end > now
+            if (old == null || resurrect) {
                 if (window.end > now) byId[window.id] = Session(
                     window.id, window.date, window.prayer, window.start, window.end, window.mode,
                     SessionStatus.SCHEDULED,
@@ -53,4 +57,7 @@ object SessionEngine {
         else session.copy(status = SessionStatus.CANCELLED, reason = reason, snoozedUntil = null)
 
     fun active(sessions: List<Session>, now: Long): List<Session> = sessions.filter { it.isActiveAt(now) }
+
+    /** Sessions that should currently show an overlay. Snoozed reminders are excluded until their boundary. */
+    fun enforcing(sessions: List<Session>, now: Long): List<Session> = sessions.filter { it.isEnforcingAt(now) }
 }

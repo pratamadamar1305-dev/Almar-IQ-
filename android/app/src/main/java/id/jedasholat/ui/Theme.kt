@@ -26,6 +26,19 @@ val Gold = Color(0xFFC7A568)
 val Cream = Color(0xFFF3F7F1)
 val LocalJedaDark = staticCompositionLocalOf { false }
 
+/** Semantic hero palette. The hero is a brand surface, but it still follows light/dark contrast. */
+data class JedaHeroColors(
+    val background: Color,
+    val onBackground: Color,
+    val muted: Color,
+    val accent: Color,
+    val artLine: Color,
+    val artMoon: Color,
+)
+val LocalJedaHero = staticCompositionLocalOf {
+    JedaHeroColors(Green, Cream, Color(0xFFD4E7DA), Gold, Color.White.copy(alpha = 0.13f), Color(0xFF164F41))
+}
+
 private val Jakarta = FontFamily(
     Font(R.font.plus_jakarta_sans_regular, FontWeight.Normal),
     Font(R.font.plus_jakarta_sans_medium, FontWeight.Medium),
@@ -97,7 +110,14 @@ fun JedaTheme(theme: Theme, content: @Composable () -> Unit) {
         error = Color(0xFFB3261E), onError = Color.White, errorContainer = Color(0xFFF9DEDC), onErrorContainer = Color(0xFF601410),
         inverseSurface = Color(0xFF172F29), inverseOnSurface = Color(0xFFF3F7F1), inversePrimary = Color(0xFFA9D8BF),
     )
-    CompositionLocalProvider(LocalJedaDark provides dark) {
+    val hero = if (dark) JedaHeroColors(
+        background = Color(0xFF17332A), onBackground = Color(0xFFEAF1EB), muted = Color(0xFFB8C9BE),
+        accent = Color(0xFFD9BE87), artLine = Color.White.copy(alpha = 0.10f), artMoon = Color(0xFF10231C),
+    ) else JedaHeroColors(
+        background = Green, onBackground = Cream, muted = Color(0xFFD4E7DA),
+        accent = Gold, artLine = Color.White.copy(alpha = 0.13f), artMoon = Color(0xFF164F41),
+    )
+    CompositionLocalProvider(LocalJedaDark provides dark, LocalJedaHero provides hero) {
         MaterialTheme(colorScheme = colors, typography = JedaTypography, shapes = JedaShapes, content = content)
     }
 }

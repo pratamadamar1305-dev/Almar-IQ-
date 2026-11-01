@@ -7,7 +7,7 @@ Gunakan APK debug dari artefak CI `JedaSholat-debug` atau build lokal. Catat mer
 | Perangkat | Android | Fokus | Status |
 |---|---:|---|---|
 | Emulator CI Pixel 6, Android 15 | 35 | overlay selected/unselected, strict auto-unlock, snooze persisten | advisory; binding izin CI belum stabil |
-| Nubia Neo 2 5G (MyOS) | 14/15 | overlay hilang saat SystemUI/IME/recents, autostart, Game Space, battery unrestricted | dilaporkan pengguna; perlu verifikasi 0.2.1 |
+| Nubia Neo 2 5G (MyOS) | 14/15 | overlay hilang saat SystemUI/IME/recents, autostart, Game Space, battery unrestricted | dilaporkan pengguna; perlu verifikasi 0.3.0 |
 | Samsung Galaxy (One UI) | 13/14/15 | battery manager, restricted settings, exact alarm | perlu perangkat |
 | Xiaomi/POCO (HyperOS/MIUI) | 13/14/15 | autostart, battery saver, overlay/accessibility survival | perlu perangkat |
 | OPPO/realme/vivo | 13/14/15 | OEM background limits, permission revocation | perlu perangkat |
@@ -50,6 +50,11 @@ Gunakan APK debug dari artefak CI `JedaSholat-debug` atau build lokal. Catat mer
 - [ ] Force stop lalu buka aplikasi: state direkonsiliasi; tidak ada timer baru yang dibuat dari awal.
 - [ ] Doze/screen off dan battery saver OEM: catat keterlambatan aktual; jangan menjanjikan always-on.
 - [ ] Hapus riwayat: riwayat hilang, pengaturan tetap. Reset data: pilihan/izin aplikasi kembali default; izin Android tetap dikelola manual.
+- [ ] Nonaktifkan satu sholat lalu aktifkan lagi sebelum jendela berakhir: sesi terjadwal/aktif pulih, tidak tetap CANCELLED.
+- [ ] Pengingat: tekan “Lanjut tanpa pengingat”, force stop layanan/buka ulang aplikasi: pengingat tidak muncul lagi sampai sesi berakhir.
+- [ ] Uninstall aplikasi yang dipilih/whitelist: pilihan ter-prune saat daftar aplikasi dimuat ulang; tidak ada crash.
+- [ ] Snooze Pengingat: beranda menampilkan “Ditunda”, bukan “Berjalan”, sampai batas tunda selesai.
+- [ ] Dua sesi dengan timestamp sama: alarm start/end tidak saling menimpa (registry per sesi).
 - [ ] Tidak ada trafik jaringan aplikasi: periksa izin INTERNET tidak ada dan tidak ada akun/ads/analytics.
 
 ## Kriteria lulus rilis
