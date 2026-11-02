@@ -6,12 +6,24 @@ Gunakan APK debug dari artefak CI `JedaSholat-debug` atau build lokal. Catat mer
 
 | Perangkat | Android | Fokus | Status |
 |---|---:|---|---|
-| Emulator CI Pixel 6, Android 15 | 35 | overlay selected/unselected, strict auto-unlock, snooze persisten | advisory; binding izin CI belum stabil |
+| Emulator CI Pixel 6, Android 15 | 35 | overlay selected/unselected, strict auto-unlock, snooze persisten | advisory; tes self-skip bila layanan tidak bind (alasan tercetak di log) |
 | Nubia Neo 2 5G (MyOS) | 14/15 | overlay hilang saat SystemUI/IME/recents, autostart, Game Space, battery unrestricted | dilaporkan pengguna; log pengguna menunjukkan `selected=0` sehingga overlay wajar tidak muncul; perlu verifikasi 0.3.1 |
 | Samsung Galaxy (One UI) | 13/14/15 | battery manager, restricted settings, exact alarm | perlu perangkat |
 | Xiaomi/POCO (HyperOS/MIUI) | 13/14/15 | autostart, battery saver, overlay/accessibility survival | perlu perangkat |
 | OPPO/realme/vivo | 13/14/15 | OEM background limits, permission revocation | perlu perangkat |
 | Pixel/AOSP | 10 dan 15 | minSdk dan targetSdk, reboot, time/timezone change | perlu perangkat |
+
+## Cara membaca job `instrumented` di CI
+
+Job ini **tidak** menjadi gate publikasi APK (`publish.needs` hanya `build` dan `ui`). Kontrak barunya:
+
+| Hasil | Arti |
+|---|---|
+| Hijau, `INSTRUMENTED_OUTCOME=passed` | Layanan aksesibilitas benar-benar bind dan assertion overlay lulus. Ini bukti nyata untuk emulator. |
+| Hijau, `INSTRUMENTED_OUTCOME=skipped-service-not-bound` | Emulator CI tidak bisa bind layanan; setiap tes self-skip dan mencetak `SKIP: accessibility service did not bind … (listed=… bound=… settingsUi=…)`. **Bukan** bukti enforcement; tetap perlu uji perangkat fisik. |
+| Merah, `INSTRUMENTED_OUTCOME=failed` | Ada assertion overlay, install, atau kegagalan nyata. Baca exception lengkap di annotation. |
+
+Sebelumnya job ini merah permanen karena harness gagal di toggle Pengaturan Android (`UiObjectNotFoundException` di `by.clazz(Switch)`), bukan karena overlay. Sekarang harness memakai `By.checkable(true)` dengan `runCatching`, dan gate-nya memakai state bind sebenarnya (`JedaAccessibilityService.bound`), bukan string pengaturan.
 
 ## Sebelum uji
 
