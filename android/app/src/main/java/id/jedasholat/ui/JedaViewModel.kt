@@ -31,8 +31,8 @@ data class UiState(
     val snoozed: List<Session> get() = sessions.filter {
         it.status == SessionStatus.SNOOZED && now < (it.snoozedUntil ?: Long.MAX_VALUE) && now < it.end
     }
-    val ready: Boolean get() = settings.protectionEnabled && settings.accessibilityConsent &&
-        capabilities.accessibility && capabilities.accessibilityBound && settings.selectedPackages.isNotEmpty()
+    val readiness: Readiness get() = ReadinessGuide.assess(settings, capabilities)
+    val ready: Boolean get() = readiness.ready
 }
 
 private data class ScheduleSnapshot(val windows: List<PrayerWindow> = emptyList(), val error: String? = null)
@@ -77,6 +77,17 @@ class JedaViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         refresh()
+        viewModelScope.launch {
+            container.settings.settings.collect { settings ->
+                EnforcementDiagnostics.update {
+                    it.copy(
+                        protectionEnabled = settings.protectionEnabled,
+                        accessibilityConsent = settings.accessibilityConsent,
+                        selectedCount = settings.selectedPackages.size,
+                    )
+                }
+            }
+        }
         viewModelScope.launch {
             while (true) {
                 extra.update { it.copy(now = System.currentTimeMillis()) }

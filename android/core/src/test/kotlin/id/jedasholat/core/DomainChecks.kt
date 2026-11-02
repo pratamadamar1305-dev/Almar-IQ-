@@ -123,6 +123,39 @@ object DomainChecks {
             require(events.size == 96)
             require(events == events.sortedWith(compareBy({ it.time }, { it.kind })))
         }
+        // 0.3.1 readiness: "everything on" must still not look ready when nothing is selected.
+        val allGranted = Capabilities(accessibility = true, exactAlarms = true, notifications = true, usageAccess = true, accessibilityBound = true)
+        check("readiness asks for apps when nothing selected") {
+            val r = ReadinessGuide.assess(settings.copy(selectedPackages = emptySet()), allGranted)
+            require(r.next == ReadinessStep.APPS); require(!r.ready); require(r.remaining == 1)
+            require(!r.steps.first { it.step == ReadinessStep.APPS }.done)
+        }
+        check("readiness ready only when every step done") {
+            require(ReadinessGuide.assess(settings, allGranted).ready)
+        }
+        check("readiness protection comes first") {
+            val r = ReadinessGuide.assess(Settings(), Capabilities())
+            require(r.next == ReadinessStep.PROTECTION)
+            require(r.nextInfo.action.isNotBlank())
+            require(r.remaining == 5)
+        }
+        check("readiness separates consent from bound service") {
+            val r = ReadinessGuide.assess(settings.copy(accessibilityConsent = false), allGranted)
+            require(r.next == ReadinessStep.CONSENT)
+        }
+        check("readiness detects enabled but unbound service") {
+            val r = ReadinessGuide.assess(settings, allGranted.copy(accessibility = true, accessibilityBound = false))
+            require(r.next == ReadinessStep.SERVICE); require(r.nextInfo.detail.contains("belum tersambung"))
+        }
+        check("readiness never marks service done without permission") {
+            val r = ReadinessGuide.assess(settings, allGranted.copy(accessibility = false, accessibilityBound = false))
+            require(r.next == ReadinessStep.ACCESSIBILITY)
+        }
+        check("readiness steps stay in fixed order") {
+            val order = ReadinessGuide.assess(Settings(), Capabilities()).steps.map { it.step }
+            require(order == listOf(ReadinessStep.PROTECTION, ReadinessStep.APPS, ReadinessStep.CONSENT,
+                ReadinessStep.ACCESSIBILITY, ReadinessStep.SERVICE, ReadinessStep.READY))
+        }
         return count
     }
 }

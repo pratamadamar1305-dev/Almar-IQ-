@@ -35,8 +35,11 @@ import id.jedasholat.ui.*
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Aplikasi pilihan", style = MaterialTheme.typography.headlineMedium)
-                Text("Tidak semua aplikasi perlu dibatasi. Pilih yang paling sering mengalihkan perhatianmu.",
-                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(if (s.selectedPackages.isEmpty())
+                        "Belum ada aplikasi dipilih, jadi layar jeda tidak akan muncul. Pilih minimal satu di daftar bawah."
+                    else "${s.selectedPackages.size} aplikasi dijeda saat jendela sholat aktif. Tidak semua aplikasi perlu dibatasi.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (s.selectedPackages.isEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         item {

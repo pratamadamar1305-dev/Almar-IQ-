@@ -1,5 +1,6 @@
 package id.jedasholat.domain
 
+import id.jedasholat.core.ReadinessGuide
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -64,6 +65,14 @@ object EnforcementDiagnostics {
             appendLine("lastDecision=${s.lastDecision} lastHideReason=${s.lastHideReason}")
             appendLine("lastError=${s.lastError}")
             appendLine("lastReconcileAt=${s.lastReconcileAt} lastUsagePollAt=${s.lastUsagePollAt}")
+            val readiness = ReadinessGuide.assess(
+                protectionEnabled = s.protectionEnabled,
+                selectedCount = s.selectedCount,
+                accessibilityConsent = s.accessibilityConsent,
+                accessibilityEnabled = s.enabledInSettings,
+                serviceBound = s.serviceBound,
+            )
+            appendLine("readiness=${readiness.next.name} pending=${readiness.remaining}")
             appendLine("events:")
             s.events.forEach { appendLine(it) }
         }

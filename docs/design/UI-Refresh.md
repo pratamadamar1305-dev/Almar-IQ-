@@ -49,3 +49,11 @@ Compose/Android resources are compiled and linted in CI. Native UI smoke tests c
 - Daftar aplikasi memiliki state memuat yang eksplisit dan tombol segarkan yang tidak bisa dipukul berulang saat loading.
 - Status Perlindungan tetap membedakan izin tercatat aktif vs layanan benar-benar tersambung; simulasi menolak bila layanan belum bound.
 - Tetap memakai Plus Jakarta Sans, ikon stroke original, target sentuh >=48dp, dan label navigasi selalu terlihat.
+
+## 0.3.1 — kesiapan perlindungan ditampilkan per langkah
+
+- Sumber kebenaran baru di core: `ReadinessGuide.assess(...)` mengembalikan enam langkah berurutan (perlindungan → aplikasi terpilih → persetujuan → izin aksesibilitas → layanan tersambung → siap).
+- Beranda tidak lagi memakai satu kalimat tebakan. Kartu menampilkan judul langkah yang benar-benar menghambat, checklist lima langkah dengan tanda selesai/belum, satu tombol aksi yang langsung mengerjakan langkah tersebut, dan sisa langkah.
+- Tab Aplikasi menyebut akibat dari nol pilihan: "layar jeda tidak akan muncul".
+- Pengaturan menonaktifkan tombol simulasi sampai kesiapan penuh dan menjelaskan penyebabnya di tempat yang sama; diagnosis menambahkan baris `readiness=`/`pending=`.
+- Token hero tetap memakai `LocalJedaHero` (nama di catatan 0.3.0 sebelumnya kurang tepat), dan salinan `Settings` di layar Pengaturan tetap hanya membaca state.

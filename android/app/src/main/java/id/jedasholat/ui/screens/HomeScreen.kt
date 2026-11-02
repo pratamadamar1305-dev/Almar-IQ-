@@ -153,26 +153,42 @@ import java.util.Locale
                     }
                 }
             } else {
-                val needsApps = s.selectedPackages.isEmpty()
+                val readiness = state.readiness
                 JedaCard(outlined = true) {
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
                         JedaIcon(JedaGlyph.SHIELD, tint = MaterialTheme.colorScheme.primary)
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(if (!s.protectionEnabled) "Perlindungan sedang mati" else if (needsApps) "Pilih aplikasi yang ingin dijeda" else "Satu langkah lagi",
-                                style = MaterialTheme.typography.titleMedium)
-                            Text(when {
-                                !s.protectionEnabled -> "Jadwal tetap bisa dilihat. Aktifkan perlindungan saat kamu siap."
-                                needsApps -> "Tidak ada aplikasi yang dipilih otomatis. Telepon dan akses darurat tetap aman."
-                                !state.capabilities.accessibility || !s.accessibilityConsent -> "Layar jeda membutuhkan izin Layanan Aksesibilitas. Isi layar dan pesan tidak dibaca."
-                                !state.capabilities.accessibilityBound -> "Izin tercatat aktif, tetapi layanan belum tersambung. Buka Pengaturan → Aksesibilitas → JedaSholat, lalu matikan dan nyalakan lagi."
-                                else -> "Periksa izin perlindungan di pengaturan."
-                            }, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(readiness.nextInfo.title, style = MaterialTheme.typography.titleMedium)
+                            Text(readiness.nextInfo.detail, style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
-                    Button(onClick = { navigate(if (needsApps && s.protectionEnabled) "apps" else "settings") }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-                        Text(if (needsApps && s.protectionEnabled) "Pilih aplikasi" else "Siapkan perlindungan")
+                    // The headline already names the blocking step, so the list only shows the rest.
+                    val others = readiness.steps.filter { it.step != ReadinessStep.READY && it.step != readiness.next }
+                    if (others.isNotEmpty()) Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        others.forEach { step ->
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                                JedaIcon(if (step.done) JedaGlyph.CHECK else JedaGlyph.MINUS,
+                                    tint = if (step.done) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    contentDescription = if (step.done) "${step.title}: selesai" else "${step.title}: belum",
+                                    modifier = Modifier.size(15.dp))
+                                Text(step.title, style = MaterialTheme.typography.bodySmall,
+                                    color = if (step.done) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface)
+                            }
+                        }
+                    }
+                    Button(onClick = {
+                        when (readiness.next) {
+                            ReadinessStep.PROTECTION -> vm.update { it.copy(protectionEnabled = true) }
+                            ReadinessStep.APPS -> navigate("apps")
+                            else -> navigate("settings")
+                        }
+                    }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                        Text(readiness.nextInfo.action)
                         Spacer(Modifier.width(8.dp)); JedaIcon(JedaGlyph.ARROW, modifier = Modifier.size(18.dp))
                     }
+                    Text("${readiness.remaining} langkah tersisa sebelum jeda bisa tampil.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
