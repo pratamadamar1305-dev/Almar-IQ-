@@ -163,16 +163,17 @@ import java.util.Locale
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        readiness.steps.filter { it.step != ReadinessStep.READY }.forEach { step ->
+                    // The headline already names the blocking step, so the list only shows the rest.
+                    val others = readiness.steps.filter { it.step != ReadinessStep.READY && it.step != readiness.next }
+                    if (others.isNotEmpty()) Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        others.forEach { step ->
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                                JedaIcon(if (step.done) JedaGlyph.CHECK else JedaGlyph.CLOSE,
+                                JedaIcon(if (step.done) JedaGlyph.CHECK else JedaGlyph.MINUS,
                                     tint = if (step.done) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                     contentDescription = if (step.done) "${step.title}: selesai" else "${step.title}: belum",
                                     modifier = Modifier.size(15.dp))
                                 Text(step.title, style = MaterialTheme.typography.bodySmall,
-                                    color = if (step.done) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
-                                    fontWeight = if (step.step == readiness.next) androidx.compose.ui.text.font.FontWeight.SemiBold else null)
+                                    color = if (step.done) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface)
                             }
                         }
                     }
