@@ -1,7 +1,7 @@
 name: Build JedaSholat Android
 on:
   push:
-    branches: ['arena/4b07b77a-almar-iq', 'arena/805bc1d8-almar-iq', 'arena/3bddf50f-almar-iq', 'arena/98d1c972-almar-iq', main]
+    branches: ['arena/4b07b77a-almar-iq', 'arena/805bc1d8-almar-iq', 'arena/3bddf50f-almar-iq', 'arena/98d1c972-almar-iq', 'arena/0b4268c4-almar-iq', main]
     paths: ['android/**', '.github/workflows/android.yml']
   workflow_dispatch:
 permissions:
@@ -215,7 +215,7 @@ jobs:
             gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "JedaSholat Debug" --notes "APK debug untuk install langsung di Android. Bukan rilis Play Store." --prerelease
           fi
           gh release upload "$TAG" JedaSholat-debug.apk JedaSholat-debug.apk.sha256 --clobber --repo "$GITHUB_REPOSITORY"
-          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --title "JedaSholat Debug 0.3.0" --notes "JedaSholat 0.3.0: perbaikan alarm per sesi, pemulihan jadwal, pengingat persisten, sanitasi data lokal, pruning aplikasi, status snooze, dan UI beranda/jadwal yang lebih rapi. APK debug untuk Android 10+, bukan rilis Play Store. Verifikasi OEM tetap mengikuti docs/DEVICE_TEST_CHECKLIST.md."
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --title "JedaSholat Debug 0.3.1" --notes "JedaSholat 0.3.1: status kesiapan perlindungan kini jujur per langkah (perlindungan, aplikasi terpilih, persetujuan, izin, layanan tersambung), tombol simulasi mati sampai benar-benar siap, diagnosis menyertakan readiness. Termasuk perbaikan 0.3.0: perbaikan alarm per sesi, pemulihan jadwal, pengingat persisten, sanitasi data lokal, pruning aplikasi, status snooze, dan UI beranda/jadwal yang lebih rapi. APK debug untuk Android 10+, bukan rilis Play Store. Verifikasi OEM tetap mengikuti docs/DEVICE_TEST_CHECKLIST.md."
 
   instrumented:
     # Advisory: accessibility binding on CI emulators is not yet reliable enough to gate the APK.

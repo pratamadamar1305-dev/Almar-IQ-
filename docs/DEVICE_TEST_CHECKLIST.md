@@ -7,7 +7,7 @@ Gunakan APK debug dari artefak CI `JedaSholat-debug` atau build lokal. Catat mer
 | Perangkat | Android | Fokus | Status |
 |---|---:|---|---|
 | Emulator CI Pixel 6, Android 15 | 35 | overlay selected/unselected, strict auto-unlock, snooze persisten | advisory; binding izin CI belum stabil |
-| Nubia Neo 2 5G (MyOS) | 14/15 | overlay hilang saat SystemUI/IME/recents, autostart, Game Space, battery unrestricted | dilaporkan pengguna; perlu verifikasi 0.3.0 |
+| Nubia Neo 2 5G (MyOS) | 14/15 | overlay hilang saat SystemUI/IME/recents, autostart, Game Space, battery unrestricted | dilaporkan pengguna; log pengguna menunjukkan `selected=0` sehingga overlay wajar tidak muncul; perlu verifikasi 0.3.1 |
 | Samsung Galaxy (One UI) | 13/14/15 | battery manager, restricted settings, exact alarm | perlu perangkat |
 | Xiaomi/POCO (HyperOS/MIUI) | 13/14/15 | autostart, battery saver, overlay/accessibility survival | perlu perangkat |
 | OPPO/realme/vivo | 13/14/15 | OEM background limits, permission revocation | perlu perangkat |
@@ -28,6 +28,7 @@ Gunakan APK debug dari artefak CI `JedaSholat-debug` atau build lokal. Catat mer
 - [ ] Tepat sebelum start: belum ada overlay. Tepat pada start: overlay muncul pada aplikasi pilihan yang sudah terbuka maupun yang baru dibuka.
 - [ ] Saat overlay tampil: tarik notification shade, buka recents, munculkan keyboard/dialog, kembali ke aplikasi pilihan; overlay harus tetap/tampil lagi tanpa membuka JedaSholat.
 - [ ] Izin aksesibilitas tercatat aktif tetapi layanan belum tersambung: UI menampilkan peringatan dan simulasi menolak sampai layanan benar-benar bound.
+- [ ] Belum ada aplikasi dipilih: beranda menyebut “Belum ada aplikasi dipilih”, tombol simulasi nonaktif, dan diagnosis menulis `readiness=APPS pending=1`.
 - [ ] Alarm exact dicabut/OEM menunda alarm: sesi tetap mulai saat ticker layanan merekonsiliasi batas waktu (catat keterlambatan aktual).
 - [ ] Aplikasi tidak dipilih dan whitelist tidak pernah ditutup.
 - [ ] Telepon/darurat, Home, Settings, pencabutan izin, dan uninstall tetap dapat diakses saat Mode Tegas.

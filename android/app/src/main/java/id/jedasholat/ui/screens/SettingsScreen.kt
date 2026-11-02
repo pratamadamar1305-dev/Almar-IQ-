@@ -113,7 +113,8 @@ import id.jedasholat.ui.*
                 diagnostics.enabledInSettings -> "Izin tercatat aktif, tetapi layanan belum tersambung. Matikan lalu nyalakan lagi izin JedaSholat di Aksesibilitas Android."
                 else -> "Layanan belum aktif."
             }, style = MaterialTheme.typography.bodyMedium)
-            Text("Aplikasi terdeteksi: ${diagnostics.foreground.ifBlank { "belum ada" }}\nKeputusan terakhir: ${diagnostics.lastDecision.ifBlank { "belum ada" }}\nAlasan sembunyi: ${diagnostics.lastHideReason.ifBlank { "belum ada" }}",
+            Text("Langkah berikutnya: ${if (state.ready) "semua siap" else state.readiness.nextInfo.title.lowercase()}\n" +
+                "Aplikasi terdeteksi: ${diagnostics.foreground.ifBlank { "belum ada" }}\nKeputusan terakhir: ${diagnostics.lastDecision.ifBlank { "belum ada" }}\nAlasan sembunyi: ${diagnostics.lastHideReason.ifBlank { "belum ada" }}",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (diagnostics.lastError.isNotBlank()) Text("Error terakhir: ${diagnostics.lastError}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
             OutlinedButton(onClick = {
@@ -138,14 +139,15 @@ import id.jedasholat.ui.*
         item { JedaCard(outlined = true) {
             SectionTitle("Coba tanpa menunggu sholat", "Simulasi 30 detik memakai layar jeda asli pada aplikasi pilihanmu. Jadwal sholat tidak berubah.")
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Button(onClick = { vm.simulate(Mode.PENGINGAT) }, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) {
+                Button(onClick = { vm.simulate(Mode.PENGINGAT) }, enabled = state.ready, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) {
                     JedaIcon(JedaGlyph.PLAY, modifier = Modifier.size(17.dp)); Spacer(Modifier.width(6.dp)); Text("Pengingat")
                 }
-                OutlinedButton(onClick = { vm.simulate(Mode.TEGAS) }, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) {
+                OutlinedButton(onClick = { vm.simulate(Mode.TEGAS) }, enabled = state.ready, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) {
                     JedaIcon(JedaGlyph.LOCK, modifier = Modifier.size(17.dp)); Spacer(Modifier.width(6.dp)); Text("Tegas")
                 }
             }
-            Text(if (state.ready) "Setelah menekan coba, buka aplikasi yang dipilih. Telepon dan layar utama tetap tersedia." else "Butuh aplikasi terpilih, perlindungan aktif, dan izin Layanan Aksesibilitas.",
+            Text(if (state.ready) "Setelah menekan coba, buka aplikasi yang dipilih. Telepon dan layar utama tetap tersedia."
+                else "Belum bisa dipakai: ${state.readiness.nextInfo.title.lowercase()}. ${state.readiness.nextInfo.detail}",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         } }
         item { JedaCard {
@@ -172,7 +174,7 @@ import id.jedasholat.ui.*
             SectionTitle("Data & privasi", "Tanpa akun, iklan, analytics, atau izin internet.")
             OutlinedButton(onClick = { confirm = "history" }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { JedaIcon(JedaGlyph.TRASH, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Hapus riwayat") }
             TextButton(onClick = { confirm = "all" }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp), colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("Hapus seluruh data lokal") }
-            Text("JedaSholat 0.3.0 · Android\nAdhan oleh Batoul Apps, lisensi MIT.\nPlus Jakarta Sans, lisensi SIL OFL.\nIzin aksesibilitas dapat dicabut kapan saja di Pengaturan Android.",
+            Text("JedaSholat 0.3.1 · Android\nAdhan oleh Batoul Apps, lisensi MIT.\nPlus Jakarta Sans, lisensi SIL OFL.\nIzin aksesibilitas dapat dicabut kapan saja di Pengaturan Android.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         } }
     }
