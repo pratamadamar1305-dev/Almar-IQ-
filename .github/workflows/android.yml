@@ -304,10 +304,14 @@ jobs:
               hits = [l for l in p.read_text(errors='replace').splitlines() if 'jedasholat' in l or 'Jeda' in l]
               for line in hits[:20]: print(f'::{level}::DUMPSYS ' + line.replace('%', '%25').replace('\n', '%0A'))
           p = Path('logcat.txt')
-          if p.exists() and level == 'error':
-              for line in p.read_text(errors='replace').splitlines():
-                  if ('jedasholat' in line and ('FATAL' in line or 'AndroidRuntime' in line or 'E/' in line)) or 'FATAL EXCEPTION' in line:
-                      print(f'::{level}::LOGCAT ' + line.replace('%', '%25').replace('\n', '%0A'))
+          if p.exists():
+              hints = [l for l in p.read_text(errors='replace').splitlines()
+                       if 'FATAL EXCEPTION' in l
+                       or ('jedasholat' in l and ('FATAL' in l or 'AndroidRuntime' in l or ' E ' in l or 'E/' in l))
+                       or 'AccessibilityService' in l or 'accessibility' in l and 'jedasholat' in l]
+              # A skip still needs evidence: print why the service never bound, but as notices.
+              for line in hints[:15]:
+                  print(f'::{level}::LOGCAT ' + line.replace('%', '%25').replace('\n', '%0A'))
           PY
       - name: Upload instrumented reports
         if: always()

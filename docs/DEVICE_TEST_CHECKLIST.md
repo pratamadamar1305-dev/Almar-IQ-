@@ -6,7 +6,7 @@ Gunakan APK debug dari artefak CI `JedaSholat-debug` atau build lokal. Catat mer
 
 | Perangkat | Android | Fokus | Status |
 |---|---:|---|---|
-| Emulator CI Pixel 6, Android 15 | 35 | overlay selected/unselected, strict auto-unlock, snooze persisten | advisory; tes self-skip bila layanan tidak bind (alasan tercetak di log) |
+| Emulator CI Pixel 6, Android 15 | 35 | overlay selected/unselected, strict auto-unlock, snooze persisten | advisory; terukur: `listed=true bound=false` sehingga 3 tes self-skip (lihat `COUNTS`) |
 | Nubia Neo 2 5G (MyOS) | 14/15 | overlay hilang saat SystemUI/IME/recents, autostart, Game Space, battery unrestricted | dilaporkan pengguna; log pengguna menunjukkan `selected=0` sehingga overlay wajar tidak muncul; perlu verifikasi 0.3.1 |
 | Samsung Galaxy (One UI) | 13/14/15 | battery manager, restricted settings, exact alarm | perlu perangkat |
 | Xiaomi/POCO (HyperOS/MIUI) | 13/14/15 | autostart, battery saver, overlay/accessibility survival | perlu perangkat |
@@ -24,6 +24,10 @@ Job ini **tidak** menjadi gate publikasi APK (`publish.needs` hanya `build` dan 
 | Merah, `INSTRUMENTED_OUTCOME=failed` | Ada assertion overlay, install, atau kegagalan nyata. Baca exception lengkap di annotation. |
 
 Sebelumnya job ini merah permanen karena harness gagal di toggle Pengaturan Android (`UiObjectNotFoundException` di `by.clazz(Switch)`), bukan karena overlay. Sekarang harness memakai `By.checkable(true)` dengan `runCatching`, dan gate-nya memakai state bind sebenarnya (`JedaAccessibilityService.bound`), bukan string pengaturan.
+
+Bukti terukur dari run terakhir: `env listed=true bound=false settingsUi=ok` dan `COUNTS executed_tests=0 skipped_tests=3`. Artinya toggle Pengaturan sudah tidak gagal lagi, izin tercatat di Secure settings, tetapi layanan tetap tidak bind di emulator CI. Karena itu emulator **tidak** dipakai sebagai bukti enforcement; bukti tetap dari perangkat fisik lewat **Pengaturan → Salin diagnosis**.
+
+Hasil tes ditulis oleh suite ke `files/instrumented-report.txt` (`executed …`, `skipped …`, `env …`) lalu dibaca CI dengan `run-as`, karena `am instrument -w` mode non-raw membuang stdout tes.
 
 ## Sebelum uji
 
