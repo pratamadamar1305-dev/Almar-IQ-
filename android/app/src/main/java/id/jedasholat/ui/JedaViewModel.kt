@@ -106,6 +106,9 @@ class JedaViewModel(app: Application) : AndroidViewModel(app) {
             }
             if (apps.isNotEmpty()) {
                 val installed = apps.map { it.packageName }.toSet()
+                val before = container.settings.settings.first()
+                val droppedSelected = before.selectedPackages - installed
+                val droppedWhitelist = before.whitelistPackages - installed
                 runCatching {
                     container.settings.update { old ->
                         val selected = old.selectedPackages intersect installed
@@ -114,6 +117,10 @@ class JedaViewModel(app: Application) : AndroidViewModel(app) {
                         else old.copy(selectedPackages = selected, whitelistPackages = whitelist)
                     }
                 }
+                // Pruning must be visible: a silently shrinking selection looks like enforcement
+                // randomly stopped, so record what was dropped for the diagnostics dump.
+                if (droppedSelected.isNotEmpty()) EnforcementDiagnostics.note("pruned selection: ${droppedSelected.joinToString()}")
+                if (droppedWhitelist.isNotEmpty()) EnforcementDiagnostics.note("pruned whitelist: ${droppedWhitelist.joinToString()}")
             }
             extra.update { it.copy(apps = apps, appsLoading = false) }
         }
