@@ -259,7 +259,7 @@ jobs:
           emulator-boot-timeout: 600
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           working-directory: android
-          script: bash -c 'set -o pipefail; pwd; adb wait-for-device; for apk in testtarget/build/outputs/apk/debug/testtarget-debug.apk app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk; do if ! adb install -r "$apk" > install-$(basename "$apk" .apk).log 2>&1; then echo "INSTALL_FAILED $apk"; cat install-$(basename "$apk" .apk).log; exit 1; fi; done; adb shell am instrument -w -e class id.jedasholat.app.EnforcementSmokeTest id.jedasholat.app.test/androidx.test.runner.AndroidJUnitRunner 2>&1 | tee connected-test.log; adb logcat -d > logcat.txt || true; adb shell settings get secure enabled_accessibility_services > accessibility-setting.txt || true; adb shell dumpsys accessibility > accessibility-dump.txt || true; adb shell uiautomator dump /sdcard/jeda-window.xml || true; adb pull /sdcard/jeda-window.xml window.xml || true; if grep -q "^OK (" connected-test.log; then if grep -q "SKIP:" connected-test.log; then echo "INSTRUMENTED_OUTCOME=skipped-service-not-bound"; else echo "INSTRUMENTED_OUTCOME=passed"; fi; exit 0; fi; echo "INSTRUMENTED_OUTCOME=failed"; grep -E "^There (was|were)|Exception|Error|at id.jedasholat" connected-test.log | head -40 || true; exit 1'
+          script: bash -c 'set -o pipefail; pwd; adb wait-for-device; for apk in testtarget/build/outputs/apk/debug/testtarget-debug.apk app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk; do if ! adb install -r "$apk" > install-$(basename "$apk" .apk).log 2>&1; then echo "INSTALL_FAILED $apk"; cat install-$(basename "$apk" .apk).log; exit 1; fi; done; adb shell am instrument -w -e class id.jedasholat.app.EnforcementSmokeTest id.jedasholat.app.test/androidx.test.runner.AndroidJUnitRunner 2>&1 | tee connected-test.log; adb logcat -d > logcat.txt || true; adb shell settings get secure enabled_accessibility_services > accessibility-setting.txt || true; adb shell dumpsys accessibility > accessibility-dump.txt || true; adb shell uiautomator dump /sdcard/jeda-window.xml || true; adb pull /sdcard/jeda-window.xml window.xml || true; if grep -q "^OK (" connected-test.log; then if grep -q "SKIP:" connected-test.log; then outcome=skipped-service-not-bound; else outcome=passed; fi; echo "INSTRUMENTED_OUTCOME=$outcome" | tee -a connected-test.log; exit 0; fi; echo "INSTRUMENTED_OUTCOME=failed" | tee -a connected-test.log; grep -E "^There (was|were)|Exception|Error|at id.jedasholat" connected-test.log | head -40 || true; exit 1'
       - name: Surface emulator diagnostics
         if: always()
         continue-on-error: true
@@ -272,28 +272,33 @@ jobs:
                   for fail in list(case.iter('failure')) + list(case.iter('error')):
                       message = case.get('name', '') + ' ' + fail.get('message', '')
                       print('::error::TEST ' + message.replace('%', '%25').replace('\n', '%0A'))
-          for name in ('build-test-apks.log', 'install-testtarget.log', 'install-app.log', 'install-test.log', 'connected-test.log'):
+          connected = Path('connected-test.log')
+          log_text = connected.read_text(errors='replace') if connected.exists() else ''
+          instrumented_ok = any(l.startswith('OK (') for l in log_text.splitlines())
+          level = 'notice' if instrumented_ok else 'error'
+          for line in log_text.splitlines():
+              if line.startswith('INSTRUMENTED_OUTCOME') or line.startswith('SKIP:') or 'There was' in line \
+                      or 'There were' in line or line.startswith('FAILURES') or 'Exception' in line \
+                      or line.lstrip().startswith('at id.jedasholat'):
+                  print(f'::{level}::RESULT ' + line.replace('%', '%25').replace('\n', '%0A'))
+          # Gradle/install logs are only error-level when the run actually failed.
+          for name in ('build-test-apks.log', 'install-testtarget.log', 'install-app.log', 'install-test.log'):
               p = Path(name)
               if p.exists():
                   for line in p.read_text(errors='replace').splitlines():
-                      if any(t in line for t in ('e: file:', 'Success', 'Failure', 'INSTALL_', 'Tests run', 'OK (',
-                                                  'FAILED', 'AssertionError', 'not bound', 'not enabled', 'Service',
-                                                  'Process crashed', 'INSTRUMENTATION', 'There was', 'There were',
-                                                  'Exception', 'Error', 'SKIP:', 'assumption', 'at id.jedasholat',
-                                                  'INSTRUMENTED_OUTCOME', 'Caused by')):
-                          print('::error::LINE ' + name + ' ' + line.replace('%', '%25').replace('\n', '%0A'))
+                      if any(t in line for t in ('e: file:', 'INSTALL_', 'FAILED', 'Process crashed', 'INSTRUMENTATION')):
+                          print(f'::error::LINE ' + name + ' ' + line.replace('%', '%25').replace('\n', '%0A'))
           p = Path('accessibility-setting.txt')
-          if p.exists(): print('::error::ACCESSIBILITY_SETTING=' + p.read_text(errors='replace').replace('\n', '%0A'))
+          if p.exists(): print(f'::{level}::ACCESSIBILITY_SETTING=' + p.read_text(errors='replace').replace('\n', '%0A'))
           p = Path('accessibility-dump.txt')
           if p.exists():
-              for line in p.read_text(errors='replace').splitlines():
-                  if 'jedasholat' in line or 'Jeda' in line:
-                      print('::error::DUMPSYS ' + line.replace('%', '%25').replace('\n', '%0A'))
+              hits = [l for l in p.read_text(errors='replace').splitlines() if 'jedasholat' in l or 'Jeda' in l]
+              for line in hits[:20]: print(f'::{level}::DUMPSYS ' + line.replace('%', '%25').replace('\n', '%0A'))
           p = Path('logcat.txt')
           if p.exists():
               for line in p.read_text(errors='replace').splitlines():
-                  if 'jedasholat' in line or 'JedaService' in line or 'FATAL' in line or 'AndroidRuntime' in line:
-                      print('::error::LOGCAT ' + line.replace('%', '%25').replace('\n', '%0A'))
+                  if ('jedasholat' in line and ('FATAL' in line or 'AndroidRuntime' in line or 'E/' in line)) or 'FATAL EXCEPTION' in line:
+                      print(f'::{level}::LOGCAT ' + line.replace('%', '%25').replace('\n', '%0A'))
           PY
       - name: Upload instrumented reports
         if: always()
