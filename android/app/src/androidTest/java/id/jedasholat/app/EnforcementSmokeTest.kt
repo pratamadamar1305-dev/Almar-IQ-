@@ -55,14 +55,17 @@ class EnforcementSmokeTest {
         runCatching { shell("settings put secure accessibility_enabled 1") }
         val listed = android.provider.Settings.Secure.getString(context.contentResolver, android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: ""
         waitForBoundService()
+        val bound = JedaAccessibilityService.bound
+        // `am instrument -w` in non-raw mode hides per-test status, so the suite reports its own
+        // state on stdout. CI greps these markers instead of guessing from "OK (N tests)".
+        println(
+            "JEDA_TEST_ENV listed=${listed.contains(service)} bound=$bound " +
+                "settingsUi=${uiEnable.exceptionOrNull()?.javaClass?.simpleName ?: "ok"}",
+        )
+        if (!bound) println("JEDA_TEST_SKIPPED service_not_bound listed=${listed.contains(service)}")
         // Gate on the real bind state, not the Secure string: an enabled-but-unbound service
         // never shows an overlay, so running the assertions would test nothing.
-        assumeTrue(
-            "SKIP: accessibility service did not bind on this emulator " +
-                "(listed=${listed.contains(service)} bound=${JedaAccessibilityService.bound} " +
-                "settingsUi=${uiEnable.exceptionOrNull()?.javaClass?.simpleName ?: "ok"})",
-            JedaAccessibilityService.bound,
-        )
+        assumeTrue("SKIP: accessibility service did not bind on this emulator", bound)
         EnforcementDiagnostics.note("instrumented: service bound, running enforcement assertions")
         device.pressHome()
         Thread.sleep(2000)
@@ -87,6 +90,7 @@ class EnforcementSmokeTest {
     }
 
     @Test fun strictOverlayAppearsOnSelectedAppAndAutoUnlocksWithoutExtending() {
+        println("JEDA_TEST_EXECUTED strict")
         val now = System.currentTimeMillis()
         val session = session(now, now + 8_000L, Mode.TEGAS)
         runBlocking { container.database.sessions().put(listOf(session.toEntity())) }
@@ -102,6 +106,7 @@ class EnforcementSmokeTest {
     }
 
     @Test fun reminderSnoozeIsPersistedOnceAndHidesOverlay() {
+        println("JEDA_TEST_EXECUTED snooze")
         val now = System.currentTimeMillis()
         val session = session(now, now + 10 * 60_000L, Mode.PENGINGAT)
         runBlocking { container.database.sessions().put(listOf(session.toEntity())) }
@@ -118,6 +123,7 @@ class EnforcementSmokeTest {
     }
 
     @Test fun unselectedAppIsNeverCovered() {
+        println("JEDA_TEST_EXECUTED unselected")
         runBlocking { container.settings.update { it.copy(selectedPackages = emptySet()) } }
         val now = System.currentTimeMillis()
         runBlocking { container.database.sessions().put(listOf(session(now, now + 60_000L, Mode.TEGAS).toEntity())) }
