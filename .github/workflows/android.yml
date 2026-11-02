@@ -259,7 +259,7 @@ jobs:
           emulator-boot-timeout: 600
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           working-directory: android
-          script: bash -c 'set -o pipefail; pwd; adb wait-for-device; for apk in testtarget/build/outputs/apk/debug/testtarget-debug.apk app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk; do if ! adb install -r "$apk" > install-$(basename "$apk" .apk).log 2>&1; then echo "INSTALL_FAILED $apk"; cat install-$(basename "$apk" .apk).log; exit 1; fi; done; adb shell am instrument -w -e class id.jedasholat.app.EnforcementSmokeTest id.jedasholat.app.test/androidx.test.runner.AndroidJUnitRunner 2>&1 | tee connected-test.log; adb logcat -d > logcat.txt || true; adb shell settings get secure enabled_accessibility_services > accessibility-setting.txt || true; adb shell dumpsys accessibility > accessibility-dump.txt || true; adb shell uiautomator dump /sdcard/jeda-window.xml || true; adb pull /sdcard/jeda-window.xml window.xml || true; if grep -q "^OK (" connected-test.log; then if grep -q "JEDA_TEST_EXECUTED" connected-test.log; then outcome=passed; else outcome=skipped-service-not-bound; fi; echo "INSTRUMENTED_OUTCOME=$outcome" | tee -a connected-test.log; exit 0; fi; echo "INSTRUMENTED_OUTCOME=failed" | tee -a connected-test.log; grep -E "^There (was|were)|Exception|Error|at id.jedasholat" connected-test.log | head -40 || true; exit 1'
+          script: bash -c 'set -o pipefail; pwd; adb wait-for-device; for apk in testtarget/build/outputs/apk/debug/testtarget-debug.apk app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk; do if ! adb install -r "$apk" > install-$(basename "$apk" .apk).log 2>&1; then echo "INSTALL_FAILED $apk"; cat install-$(basename "$apk" .apk).log; exit 1; fi; done; adb shell run-as id.jedasholat.app rm -f files/instrumented-report.txt || true; adb shell am instrument -w -e class id.jedasholat.app.EnforcementSmokeTest id.jedasholat.app.test/androidx.test.runner.AndroidJUnitRunner 2>&1 | tee connected-test.log; adb shell run-as id.jedasholat.app cat files/instrumented-report.txt > instrumented-report.txt 2>/dev/null || true; adb logcat -d > logcat.txt || true; adb shell settings get secure enabled_accessibility_services > accessibility-setting.txt || true; adb shell dumpsys accessibility > accessibility-dump.txt || true; adb shell uiautomator dump /sdcard/jeda-window.xml || true; adb pull /sdcard/jeda-window.xml window.xml || true; if grep -q "^OK (" connected-test.log; then if grep -q "^executed " instrumented-report.txt 2>/dev/null; then outcome=passed; else outcome=skipped-service-not-bound; fi; echo "INSTRUMENTED_OUTCOME=$outcome" | tee -a connected-test.log; exit 0; fi; echo "INSTRUMENTED_OUTCOME=failed" | tee -a connected-test.log; grep -E "^There (was|were)|Exception|Error|at id.jedasholat" connected-test.log | head -40 || true; exit 1'
       - name: Surface emulator diagnostics
         if: always()
         continue-on-error: true
@@ -274,13 +274,15 @@ jobs:
                       print('::error::TEST ' + message.replace('%', '%25').replace('\n', '%0A'))
           connected = Path('connected-test.log')
           log_text = connected.read_text(errors='replace') if connected.exists() else ''
-          executed = sum(1 for l in log_text.splitlines() if 'JEDA_TEST_EXECUTED' in l)
-          skipped = sum(1 for l in log_text.splitlines() if 'JEDA_TEST_SKIPPED' in l)
+          report_path = Path('instrumented-report.txt')
+          report_lines = report_path.read_text(errors='replace').splitlines() if report_path.exists() else []
+          executed = sum(1 for l in report_lines if l.startswith('executed '))
+          skipped = sum(1 for l in report_lines if l.startswith('skipped '))
           print(f'::notice::COUNTS executed_tests={executed} skipped_tests={skipped}')
           if executed == 0:
               print('::notice::NOTE emulator skipped enforcement assertions; physical device still required')
-          for line in log_text.splitlines():
-              if 'JEDA_TEST_ENV' in line or 'JEDA_TEST_SKIPPED' in line:
+          for line in report_lines:
+              if line.startswith('env ') or line.startswith('skipped '):
                   print('::notice::ENV ' + line.replace('%', '%25').replace('\n', '%0A'))
           log_text = connected.read_text(errors='replace') if connected.exists() else ''
           instrumented_ok = any(l.startswith('OK (') for l in log_text.splitlines())
@@ -324,4 +326,5 @@ jobs:
             android/window.xml
             android/accessibility-setting.txt
             android/accessibility-dump.txt
+            android/instrumented-report.txt
           if-no-files-found: warn

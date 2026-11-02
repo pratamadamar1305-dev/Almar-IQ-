@@ -18,6 +18,7 @@ import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.File
 import java.time.Instant
 import java.time.ZoneId
 
@@ -62,7 +63,8 @@ class EnforcementSmokeTest {
             "JEDA_TEST_ENV listed=${listed.contains(service)} bound=$bound " +
                 "settingsUi=${uiEnable.exceptionOrNull()?.javaClass?.simpleName ?: "ok"}",
         )
-        if (!bound) println("JEDA_TEST_SKIPPED service_not_bound listed=${listed.contains(service)}")
+        report("env listed=${listed.contains(service)} bound=$bound settingsUi=${uiEnable.exceptionOrNull()?.javaClass?.simpleName ?: "ok"}")
+        if (!bound) report("skipped service_not_bound listed=${listed.contains(service)}")
         // Gate on the real bind state, not the Secure string: an enabled-but-unbound service
         // never shows an overlay, so running the assertions would test nothing.
         assumeTrue("SKIP: accessibility service did not bind on this emulator", bound)
@@ -80,6 +82,7 @@ class EnforcementSmokeTest {
     }
 
     @After fun tearDown() {
+        report("finished")
         runBlocking {
             container.database.sessions().clear()
             container.settings.update { it.copy(protectionEnabled = false, selectedPackages = emptySet()) }
@@ -90,7 +93,7 @@ class EnforcementSmokeTest {
     }
 
     @Test fun strictOverlayAppearsOnSelectedAppAndAutoUnlocksWithoutExtending() {
-        println("JEDA_TEST_EXECUTED strict")
+        report("executed strict")
         val now = System.currentTimeMillis()
         val session = session(now, now + 8_000L, Mode.TEGAS)
         runBlocking { container.database.sessions().put(listOf(session.toEntity())) }
@@ -106,7 +109,7 @@ class EnforcementSmokeTest {
     }
 
     @Test fun reminderSnoozeIsPersistedOnceAndHidesOverlay() {
-        println("JEDA_TEST_EXECUTED snooze")
+        report("executed snooze")
         val now = System.currentTimeMillis()
         val session = session(now, now + 10 * 60_000L, Mode.PENGINGAT)
         runBlocking { container.database.sessions().put(listOf(session.toEntity())) }
@@ -123,7 +126,7 @@ class EnforcementSmokeTest {
     }
 
     @Test fun unselectedAppIsNeverCovered() {
-        println("JEDA_TEST_EXECUTED unselected")
+        report("executed unselected")
         runBlocking { container.settings.update { it.copy(selectedPackages = emptySet()) } }
         val now = System.currentTimeMillis()
         runBlocking { container.database.sessions().put(listOf(session(now, now + 60_000L, Mode.TEGAS).toEntity())) }
@@ -179,6 +182,13 @@ class EnforcementSmokeTest {
         assertNotNull("Install testtarget-debug.apk before connected tests", intent)
         intent!!.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK)
         context.startActivity(intent)
+    }
+    /**
+     * `am instrument -w` in non-raw mode drops test stdout, so results are written where the
+     * workflow can read them with `run-as`. CI deletes the file before each run.
+     */
+    private fun report(line: String) {
+        runCatching { File(context.filesDir, "instrumented-report.txt").appendText(line + "\n") }
     }
     private fun shell(command: String): String {
         instrumentation.uiAutomation.executeShellCommand(command).use { fd ->
